@@ -17,7 +17,12 @@ const App: React.FC = () => {
   const [bgQuery, setBgQuery] = useState('');
   const [bgResults, setBgResults] = useState<BackgroundImage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [isBgLocked, setIsBgLocked] = useState(false);
+  
+  // LOCK BACKGROUND BY DEFAULT (User Request)
+  const [isBgLocked, setIsBgLocked] = useState(true);
+  
+  // New State: Controls visibility of tools specifically during the snapshot process
+  const [isSaving, setIsSaving] = useState(false);
   
   // UI Visibility State (Toggle to hide menus)
   const [uiVisible, setUiVisible] = useState(true);
@@ -86,35 +91,40 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // SAVE IMAGE LOGIC (FIXED FOR MOBILE DISTORTION)
+  // SAVE IMAGE LOGIC (FIXED FOR MOBILE DISTORTION & BUBBLES)
   const handleSaveScene = async () => {
-    // Deselect item to remove dashed lines/buttons before saving
+    // 1. Enter Saving Mode (Hides all UI tools, locks, dashed lines)
     setSelectedId(null);
+    setIsSaving(true);
 
-    // Small delay to allow React to remove the selection indicators
+    // 2. Wait for React to render the "clean" state
+    // INCREASED TIMEOUT to ensure UI is completely hidden before capture
     setTimeout(async () => {
         const stageElement = document.getElementById('stage-container');
-        if (!stageElement) return;
+        if (!stageElement) {
+            setIsSaving(false);
+            return;
+        }
 
         try {
-            // CRITICAL FIX FOR MOBILE:
-            // 1. We do NOT pass width/height explicitly. This forces html2canvas to capture the "natural" size of the element.
-            // 2. We set scrollX/Y to 0 to avoid offsets.
-            // 3. We use a high scale for quality.
-            
+            // Get current dimensions
+            const width = stageElement.offsetWidth;
+            const height = stageElement.offsetHeight;
+
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                scale: 3, // 3x Resolution (HD)
-                backgroundColor: null,
+                // High resolution scale
+                scale: 3, 
+                backgroundColor: null, // Keep transparency if any
                 logging: false,
+                // These reset scroll to prevent cropping
                 scrollX: 0,
                 scrollY: 0,
                 x: 0,
                 y: 0,
-                // These settings ensure it captures exactly what's in the DOM
-                windowWidth: stageElement.scrollWidth,
-                windowHeight: stageElement.scrollHeight
+                width: width,
+                height: height
             });
             
             // Create download link
@@ -125,8 +135,11 @@ const App: React.FC = () => {
         } catch (err) {
             console.error("Erro ao salvar:", err);
             alert("Ops! Não consegui salvar a imagem. Tente novamente.");
+        } finally {
+            // 3. Exit Saving Mode (Restore UI)
+            setIsSaving(false);
         }
-    }, 100);
+    }, 500); // 500ms delay to ensure locks disappear
   };
 
   return (
@@ -135,7 +148,7 @@ const App: React.FC = () => {
       
       {/* Header - Slides up when UI hidden */}
       <header 
-        className={`absolute top-0 left-0 right-0 z-30 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible ? 'translate-y-0' : '-translate-y-full'}`}
+        className={`absolute top-0 left-0 right-0 z-30 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible && !isSaving ? 'translate-y-0' : '-translate-y-full'}`}
       >
         <div className="flex justify-between items-center p-4">
             <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border-2 border-gacha-pink pointer-events-auto flex items-center gap-2">
@@ -147,9 +160,11 @@ const App: React.FC = () => {
             
             <button 
                 onClick={handleSaveScene}
-                className="bg-gradient-to-r from-gacha-hot to-purple-400 text-white px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 pointer-events-auto hover:scale-105 transition-transform border-2 border-white"
+                disabled={isSaving}
+                className="bg-gradient-to-r from-gacha-hot to-purple-400 text-white px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 pointer-events-auto hover:scale-105 transition-transform border-2 border-white disabled:opacity-50"
             >
-                <Download size={18} /> <span className="hidden md:inline">Salvar</span>
+                {isSaving ? <Sparkles className="animate-spin" size={18} /> : <Download size={18} />} 
+                <span className="hidden md:inline">{isSaving ? 'Salvando...' : 'Salvar'}</span>
             </button>
         </div>
       </header>
@@ -161,6 +176,7 @@ const App: React.FC = () => {
           backgroundUrl={background}
           selectedId={selectedId}
           isBgLocked={isBgLocked}
+          isSaving={isSaving} // Pass saving state to hide internal tools
           onToggleBgLock={() => setIsBgLocked(!isBgLocked)}
           onSelectItem={setSelectedId}
           onUpdateItem={handleUpdateItem}
@@ -169,7 +185,7 @@ const App: React.FC = () => {
       </main>
 
       {/* "Show UI" Toggle Button (Only visible when UI is hidden) */}
-      {!uiVisible && (
+      {!uiVisible && !isSaving && (
           <button 
             onClick={() => setUiVisible(true)}
             className="absolute bottom-6 right-6 z-40 bg-white/50 backdrop-blur-sm p-3 rounded-full shadow-lg border-2 border-white/50 text-gacha-text hover:bg-white transition-all animate-fade-in"
@@ -178,9 +194,9 @@ const App: React.FC = () => {
           </button>
       )}
 
-      {/* Toolbar Footer - Slides down when UI hidden */}
+      {/* Toolbar Footer - Slides down when UI hidden or Saving */}
       <footer 
-        className={`absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center justify-end pb-6 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible ? 'translate-y-0' : 'translate-y-[150%]'}`}
+        className={`absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center justify-end pb-6 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible && !isSaving ? 'translate-y-0' : 'translate-y-[150%]'}`}
       >
         {/* Main Control Bar */}
         <div className="bg-white/90 backdrop-blur-xl shadow-2xl rounded-3xl p-2 px-4 md:px-6 flex items-center gap-3 md:gap-6 pointer-events-auto border-2 border-white ring-2 ring-gacha-pink/20 mx-4 max-w-full overflow-x-auto no-scrollbar">

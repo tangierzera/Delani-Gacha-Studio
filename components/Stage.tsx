@@ -7,6 +7,7 @@ interface StageProps {
   backgroundUrl: string | null;
   selectedId: string | null;
   isBgLocked: boolean;
+  isSaving: boolean; // Prop to know when we are snapshotting
   onToggleBgLock: () => void;
   onSelectItem: (id: string | null) => void;
   onUpdateItem: (id: string, updates: Partial<SceneItem>) => void;
@@ -18,6 +19,7 @@ const Stage: React.FC<StageProps> = ({
   backgroundUrl, 
   selectedId, 
   isBgLocked,
+  isSaving,
   onToggleBgLock,
   onSelectItem, 
   onUpdateItem,
@@ -60,7 +62,6 @@ const Stage: React.FC<StageProps> = ({
   // --- Input Handlers ---
 
   const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, itemId: string | null) => {
-    // If mouse, only left click
     if ('button' in e && (e as React.PointerEvent).button !== 0) return;
 
     const isTouch = 'touches' in e;
@@ -75,7 +76,6 @@ const Stage: React.FC<StageProps> = ({
       const item = items.find(i => i.id === itemId);
       if (!item) return;
 
-      // DO NOT allow movement if locked
       if (item.locked) return;
 
       if (touchCount === 2 && isTouch) {
@@ -96,10 +96,8 @@ const Stage: React.FC<StageProps> = ({
         });
       }
     } else {
-      // Background Logic
       onSelectItem(null);
 
-      // DO NOT allow movement if background is locked
       if (isBgLocked) return;
 
       if (touchCount === 2 && isTouch) {
@@ -132,7 +130,7 @@ const Stage: React.FC<StageProps> = ({
 
     if (activeMode.startsWith('item') && selectedId) {
        const item = items.find(i => i.id === selectedId);
-       if (!item || item.locked) return; // Extra safety check
+       if (!item || item.locked) return; 
 
        if (activeMode === 'item-pinch' && touches && touches.length === 2) {
          const currentDist = getDistance(touches);
@@ -219,9 +217,10 @@ const Stage: React.FC<StageProps> = ({
                 src={backgroundUrl} 
                 crossOrigin="anonymous"
                 alt="scene-background"
-                className="min-w-full min-h-full object-cover pointer-events-none shadow-2xl"
-                style={{ maxWidth: 'none' }} 
+                // object-center: ensure it centers
+                className="h-full w-auto max-w-none min-w-full object-cover object-center pointer-events-none shadow-2xl"
                 onError={() => setBgHasError(true)}
+                draggable={false}
             />
           ) : (
             <div 
@@ -240,8 +239,8 @@ const Stage: React.FC<StageProps> = ({
         </div>
       )}
 
-      {/* BACKGROUND LOCK BUTTON */}
-      {backgroundUrl && activeMode === 'none' && !selectedId && (
+      {/* BACKGROUND LOCK BUTTON - Hidden when saving */}
+      {backgroundUrl && activeMode === 'none' && !selectedId && !isSaving && (
           <button 
             onClick={(e) => { e.stopPropagation(); onToggleBgLock(); }}
             className={`absolute bottom-4 left-4 z-40 p-2 rounded-full shadow-lg border-2 border-white transition-all ${isBgLocked ? 'bg-gacha-hot text-white' : 'bg-white/80 text-gacha-text'}`}
@@ -264,17 +263,17 @@ const Stage: React.FC<StageProps> = ({
           onTouchStart={(e) => handlePointerDown(e, item.id)}
         >
             {item.type === 'character' && item.src && (
-                <div className={`relative ${selectedId === item.id ? 'ring-2 ring-gacha-sky ring-dashed rounded-xl' : ''}`}>
+                <div className={`relative ${selectedId === item.id && !isSaving ? 'ring-2 ring-gacha-sky ring-dashed rounded-xl' : ''}`}>
                     <img src={item.src} alt="Character" className="pointer-events-none max-h-64 object-contain drop-shadow-xl" crossOrigin="anonymous" />
                     
-                    {/* Locked Indicator */}
-                    {item.locked && (
+                    {/* Locked Indicator - Hidden when saving */}
+                    {item.locked && !isSaving && (
                          <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full">
                             <Lock size={12} />
                          </div>
                     )}
 
-                    {selectedId === item.id && !item.locked && (
+                    {selectedId === item.id && !item.locked && !isSaving && (
                         <button 
                             className="absolute -top-4 -right-4 bg-red-400 text-white p-2 rounded-full shadow-lg hover:bg-red-500 transition-colors border-2 border-white pointer-events-auto"
                             onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
@@ -286,25 +285,23 @@ const Stage: React.FC<StageProps> = ({
             )}
 
             {item.type === 'bubble' && (
-                <div className="relative">
-                     {/* Locked Indicator for Bubble */}
-                     {item.locked && (
-                         <div className="absolute -top-2 right-1/2 transform translate-x-1/2 z-20 bg-black/50 text-white p-1 rounded-full shadow-sm">
+                <div className="relative group flex items-center justify-center">
+                     {/* Locked Indicator for Bubble - Hidden when saving */}
+                     {item.locked && !isSaving && (
+                         <div className="absolute -top-4 right-1/2 transform translate-x-1/2 z-50 bg-black/50 text-white p-1 rounded-full shadow-sm pointer-events-none">
                             <Lock size={12} />
                          </div>
                     )}
 
-                    {/* Tail - Simplified Positioning to fix saving issues */}
+                    {/* Tail - Positioned Absolute to the container, not fixed to SVG */}
                     <div 
                         className="absolute w-full h-full pointer-events-none z-0 flex items-center justify-center"
                         style={{ transform: `rotate(${item.tailAngle || 90}deg)` }}
                     >
-                         {/* Push tail outside the center */}
                         <div className="absolute translate-y-[60%]">
                              {item.bubbleStyle === 'speech' ? (
                                  <svg width="30" height="40" viewBox="0 0 40 50" className="drop-shadow-sm">
                                      <path d="M 0 0 L 20 45 L 40 0 Z" fill="white" stroke="#6D597A" strokeWidth="4" />
-                                     {/* Patch to hide border intersection */}
                                      <path d="M 2 0 L 38 0 L 20 15 Z" fill="white" stroke="none" />
                                  </svg>
                              ) : (
@@ -316,29 +313,40 @@ const Stage: React.FC<StageProps> = ({
                         </div>
                     </div>
 
-                    {/* Bubble Content */}
+                    {/* Bubble Content - PURE CSS BOX THAT GROWS */}
+                    {/* Added min-w to ensure it has width even if empty */}
                     <div 
-                        className={`relative min-w-[120px] min-h-[70px] p-3 flex items-center justify-center text-center transition-all z-10
-                        ${selectedId === item.id ? 'ring-2 ring-gacha-sky ring-dashed' : ''}
+                        className={`relative min-w-[120px] max-w-[400px] z-10 transition-all
+                        ${selectedId === item.id && !isSaving ? 'ring-2 ring-gacha-sky ring-dashed' : ''}
                         ${item.bubbleStyle === 'thought' 
-                            ? 'bg-white rounded-[50%] border-4 border-gacha-text' 
-                            : 'bg-white rounded-2xl border-4 border-gacha-text'} 
-                        shadow-xl`}
+                            ? 'bg-white rounded-[50%] border-4 border-gacha-text px-6 py-4' 
+                            : 'bg-white rounded-2xl border-4 border-gacha-text px-4 py-3'} 
+                        shadow-xl flex items-center justify-center`}
                     >
-                        <textarea 
-                            value={item.text}
-                            onChange={(e) => onUpdateItem(item.id, { text: e.target.value })}
-                            className="w-full h-full bg-transparent border-none resize-none text-center focus:outline-none text-gacha-text font-sans font-bold text-lg pointer-events-auto leading-tight placeholder-gacha-text/30 min-w-[100px]"
-                            placeholder="Digite..."
-                            onPointerDown={(e) => e.stopPropagation()} 
-                            readOnly={item.locked}
-                        />
+                        <div 
+                            contentEditable={!item.locked && !isSaving}
+                            suppressContentEditableWarning={true}
+                            onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
+                            className="w-full h-full bg-transparent border-none outline-none text-center text-gacha-text font-sans font-bold text-lg pointer-events-auto leading-normal whitespace-pre-wrap break-words empty:before:content-[attr(data-placeholder)] empty:before:text-gacha-text/30"
+                            data-placeholder="Digite..."
+                            style={{ 
+                                cursor: item.locked ? 'default' : 'text',
+                                wordBreak: 'break-word', 
+                                overflowWrap: 'break-word',
+                                minHeight: '1.2em' // Ensure at least one line height
+                            }}
+                            onPointerDown={(e) => {
+                                // Allow focus only if not dragging
+                                e.stopPropagation();
+                            }}
+                        >
+                            {item.text}
+                        </div>
                     </div>
 
-                     {/* Controls (Only if NOT Locked) */}
-                     {selectedId === item.id && (
+                     {/* Controls (Only if NOT Locked and NOT Saving) */}
+                     {selectedId === item.id && !isSaving && (
                         <>
-                            {/* Lock Toggle */}
                              <button 
                                 className="absolute -top-3 -left-3 z-50 bg-yellow-400 text-white p-2 rounded-full shadow-lg border-2 border-white pointer-events-auto"
                                 onPointerDown={(e) => { 
