@@ -10,6 +10,7 @@ export interface SceneItem {
   scale: number;
   rotation: number;
   zIndex: number;
+  visible?: boolean;
   locked?: boolean;
   
   // Character/Sticker specific

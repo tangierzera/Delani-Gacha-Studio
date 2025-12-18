@@ -1,6 +1,6 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SceneItem, AspectRatio } from '../types';
-import { X, MessageCircle, RefreshCw, Lock, Unlock, RotateCw, Trash2, RotateCcw, Copy } from 'lucide-react';
+import { Lock, Unlock, RefreshCw, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -19,33 +19,25 @@ const Stage: React.FC<StageProps> = ({
   items, backgroundUrl, selectedId, isBgLocked, isSaving, aspectRatio,
   onToggleBgLock, onSelectItem, onUpdateItem, onRemoveItem
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [bgTransform, setBgTransform] = useState({ x: 0, y: 0, scale: 1 });
 
-  // --- Gestures State ---
+  // Gestures
   const [activeMode, setActiveMode] = useState<'none' | 'item-drag' | 'item-pinch' | 'bg-drag' | 'bg-pinch'>('none');
   const [gesture, setGesture] = useState({ 
     startX: 0, startY: 0, startDist: 0, startAngle: 0,
     initialX: 0, initialY: 0, initialScale: 1, initialRotation: 0 
   });
 
-  // Reset bg on change
   useEffect(() => {
     if (!backgroundUrl) setBgTransform({ x: 0, y: 0, scale: 1 });
   }, [backgroundUrl, aspectRatio]);
 
-  // --- Math Helpers ---
+  // Helpers
   const getDist = (touches: React.TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
   const getAng = (touches: React.TouchList) => Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX) * (180 / Math.PI);
 
-  // --- Handlers ---
   const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, itemId: string | null) => {
-    // Only left click
     if ('button' in e && (e as React.PointerEvent).button !== 0) return;
-    
-    // Prevent default browser zooming
-    // e.preventDefault(); // CAUTION: This might block scrolling if not careful, but needed for canvas
-
     const isTouch = 'touches' in e;
     const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
     const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
@@ -54,11 +46,8 @@ const Stage: React.FC<StageProps> = ({
     if (itemId) {
         e.stopPropagation();
         onSelectItem(itemId);
-        
-        // Bring to front logic (simple Z-index bump could be added here if we re-sorted array)
-        
         const item = items.find(i => i.id === itemId);
-        if (!item || item.locked) return;
+        if (!item || item.locked || (item.visible === false)) return; 
 
         if (touchCount === 2 && isTouch) {
             const dist = getDist((e as React.TouchEvent).touches);
@@ -76,10 +65,8 @@ const Stage: React.FC<StageProps> = ({
             });
         }
     } else {
-        // Background Logic
         onSelectItem(null);
         if (isBgLocked) return;
-        
         if (touchCount === 2 && isTouch) {
             const dist = getDist((e as React.TouchEvent).touches);
             setActiveMode('bg-pinch');
@@ -100,7 +87,6 @@ const Stage: React.FC<StageProps> = ({
   const handlePointerMove = (e: any) => {
     if (activeMode === 'none') return;
     e.preventDefault();
-
     const isTouch = 'touches' in e;
     const clientX = isTouch ? e.touches[0].clientX : e.clientX;
     const clientY = isTouch ? e.touches[0].clientY : e.clientY;
@@ -132,7 +118,6 @@ const Stage: React.FC<StageProps> = ({
 
   const handlePointerUp = () => setActiveMode('none');
 
-  // --- Global Event Listeners for smooth drag outside div ---
   useEffect(() => {
     if (activeMode !== 'none') {
         window.addEventListener('pointermove', handlePointerMove);
@@ -148,14 +133,12 @@ const Stage: React.FC<StageProps> = ({
     }
   }, [activeMode, selectedId]);
 
-  // --- Styling ---
   const getRatioClass = () => {
     if (aspectRatio === '9:16') return 'aspect-[9/16] h-[85vh]';
     if (aspectRatio === '16:9') return 'aspect-[16/9] w-full max-w-4xl';
     return 'aspect-square h-[70vh]';
   }
 
-  // --- Render ---
   return (
     <div className="w-full h-full flex items-center justify-center p-4" onPointerDown={() => onSelectItem(null)}>
         <div 
@@ -164,7 +147,7 @@ const Stage: React.FC<StageProps> = ({
             onPointerDown={(e) => handlePointerDown(e, null)}
             onTouchStart={(e) => handlePointerDown(e, null)}
         >
-            {/* 1. BACKGROUND LAYER */}
+            {/* BACKGROUND */}
             <div 
                 className="absolute inset-0 w-full h-full pointer-events-none"
                 style={{ transform: `translate(${bgTransform.x}px, ${bgTransform.y}px) scale(${bgTransform.scale})` }}
@@ -186,107 +169,135 @@ const Stage: React.FC<StageProps> = ({
                 </button>
             )}
 
-            {/* 2. ITEMS LAYER */}
-            {items.map(item => (
-                <div
-                    key={item.id}
-                    className={`absolute select-none group touch-none ${selectedId === item.id ? 'z-50' : 'z-20'}`}
-                    style={{
-                        transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
-                        cursor: item.locked ? 'default' : 'grab'
-                    }}
-                    onPointerDown={(e) => handlePointerDown(e, item.id)}
-                    onTouchStart={(e) => handlePointerDown(e, item.id)}
-                >
-                    <div className={`relative ${selectedId === item.id && !isSaving ? 'ring-2 ring-pink-400 ring-dashed rounded-lg' : ''}`}>
-                        
-                        {/* --- CONTENT RENDERER --- */}
-                        
-                        {/* A. CHARACTERS */}
-                        {item.type === 'character' && (
-                            <img 
-                                src={item.src} 
-                                className="max-h-64 w-auto h-auto object-contain pointer-events-none drop-shadow-md" 
-                                crossOrigin="anonymous"
-                                draggable={false}
-                            />
-                        )}
+            {/* ITEMS */}
+            {items.map((item) => {
+                if (item.visible === false) return null;
 
-                        {/* B. STICKERS */}
-                        {item.type === 'sticker' && (
-                            <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2">
-                                {item.emoji}
-                            </div>
-                        )}
+                return (
+                    <div
+                        key={item.id}
+                        className={`absolute select-none group touch-none`}
+                        style={{
+                            transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
+                            cursor: item.locked ? 'default' : 'grab',
+                            zIndex: selectedId === item.id ? 9999 : 'auto' 
+                        }}
+                        onPointerDown={(e) => handlePointerDown(e, item.id)}
+                        onTouchStart={(e) => handlePointerDown(e, item.id)}
+                    >
+                        <div className={`relative ${selectedId === item.id && !isSaving ? 'ring-2 ring-pink-400 ring-dashed rounded-lg' : ''}`}>
+                            
+                            {/* --- CHARACTER --- */}
+                            {item.type === 'character' && (
+                                <img src={item.src} className="max-h-64 w-auto h-auto object-contain pointer-events-none drop-shadow-md" crossOrigin="anonymous" draggable={false}/>
+                            )}
 
-                        {/* C. BUBBLES (Fixed Spacing Tech) */}
-                        {item.type === 'bubble' && (
-                            <div className="relative flex items-center justify-center">
-                                {/* Bubble Container */}
-                                <div 
-                                    className={`
-                                        relative z-20 bg-white border-[3px] border-[#6D597A] shadow-md
-                                        ${item.bubbleStyle === 'thought' ? 'rounded-full px-6 py-4' : 'rounded-2xl px-4 py-2'}
-                                    `}
-                                    // 'inline-table' is the magic CSS property here. 
-                                    // Unlike 'block' or 'flex', it collapses perfectly around text content 
-                                    // and renders consistently in html2canvas without bottom whitespace.
-                                    style={{ display: 'inline-table', width: 'auto' }}
-                                >
+                            {/* --- STICKER --- */}
+                            {item.type === 'sticker' && (
+                                <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2 leading-none">{item.emoji}</div>
+                            )}
+
+                            {/* --- BUBBLE (PRO GACHA STYLE) --- */}
+                            {item.type === 'bubble' && (
+                                <div className="relative flex flex-col items-center">
+                                    {/* The Bubble Container */}
                                     <div 
-                                        data-bubble-text 
-                                        contentEditable={!item.locked && !isSaving}
-                                        suppressContentEditableWarning
-                                        onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
-                                        className="outline-none text-center font-bold text-[#6D597A] min-w-[50px] whitespace-pre-wrap break-words leading-[1.2]"
-                                        onPointerDown={(e) => e.stopPropagation()}
-                                        style={{ display: 'block' }} 
+                                        className={`
+                                            relative z-20 bg-white border-[4px] border-[#6D597A] shadow-sm
+                                            ${item.bubbleStyle === 'thought' ? 'rounded-[3rem] px-6 py-4' : 'rounded-3xl px-5 py-3'}
+                                            flex items-center justify-center
+                                        `}
+                                        style={{ 
+                                            // FIX 1: Max width is strictly relative to viewport (prevents screen overflow)
+                                            maxWidth: 'min(70vw, 300px)',
+                                            width: 'max-content',
+                                            minWidth: '60px'
+                                        }}
+                                        data-bubble-container 
                                     >
-                                        {item.text}
-                                    </div>
-                                </div>
-                                
-                                {/* Tail SVG */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10" style={{ transform: `rotate(${item.tailAngle || 45}deg)` }}>
-                                    <div className="translate-y-[28px]">
-                                        {item.bubbleStyle === 'speech' ? (
-                                            <svg width="30" height="30" viewBox="0 0 32 32" className="drop-shadow-sm">
-                                                <path d="M10,0 Q16,20 30,30 Q10,25 0,0 Z" fill="white" stroke="#6D597A" strokeWidth="3" />
-                                                <rect x="0" y="-5" width="20" height="10" fill="white" />
-                                            </svg>
-                                        ) : (
-                                            <div className="flex flex-col items-center gap-1 mt-1">
-                                                <div className="w-4 h-4 bg-white border-2 border-[#6D597A] rounded-full"/>
-                                                <div className="w-2 h-2 bg-white border-2 border-[#6D597A] rounded-full"/>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* --- CONTROLS --- */}
-                        {selectedId === item.id && !isSaving && (
-                            <>
-                                <button onPointerDown={(e) => {e.stopPropagation(); onRemoveItem(item.id)}} className="absolute -top-4 -right-4 bg-red-500 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110 transition-transform"><Trash2 size={14}/></button>
-                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { locked: !item.locked })}} className="absolute -top-4 -left-4 bg-yellow-400 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110 transition-transform">{item.locked ? <Lock size={14}/> : <Unlock size={14}/>}</button>
-                                
-                                {item.type === 'bubble' && (
-                                    <>
-                                        <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech' })}} className="absolute -bottom-4 -right-4 bg-blue-400 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110"><RefreshCw size={14}/></button>
-                                        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 bg-white/80 p-1 rounded-full flex gap-2 border border-pink-200">
-                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) - 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCcw size={14}/></button>
-                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) + 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCw size={14}/></button>
+                                        <div 
+                                            data-bubble-text 
+                                            contentEditable={!item.locked && !isSaving}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
+                                            className="outline-none text-center font-bold text-[#6D597A]"
+                                            onPointerDown={(e) => e.stopPropagation()}
+                                            style={{ 
+                                                // FIX 2: Overflow-wrap: anywhere forces long strings "AHDUW..." to break
+                                                overflowWrap: 'anywhere',
+                                                wordBreak: 'break-word',
+                                                whiteSpace: 'pre-wrap',
+                                                lineHeight: '1.2',
+                                                fontSize: '16px',
+                                                width: '100%',
+                                                cursor: item.locked ? 'default' : 'text'
+                                            }} 
+                                        >
+                                            {item.text}
                                         </div>
-                                    </>
-                                )}
-                            </>
-                        )}
+                                    </div>
+                                    
+                                    {/* The Tail - Absolutely positioned relative to the center */}
+                                    <div 
+                                        className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center"
+                                        style={{ 
+                                            transform: `rotate(${item.tailAngle || 180}deg)`,
+                                            transformOrigin: 'center center'
+                                        }}
+                                    >
+                                        {/* Push tail to the edge (approx distance from center) */}
+                                        <div className="translate-y-[calc(50%+10px)]" style={{ marginTop: item.bubbleStyle === 'thought' ? '20px' : '15px' }}>
+                                            {item.bubbleStyle === 'speech' ? (
+                                                <svg width="30" height="25" viewBox="0 0 30 25" style={{ overflow: 'visible' }}>
+                                                    {/* The Main Triangle (White with Purple Border) */}
+                                                    {/* We draw a path that looks like a V but closed at top with a curve matching bubble */}
+                                                    <path 
+                                                        d="M0,0 L15,25 L30,0" 
+                                                        fill="white" 
+                                                        stroke="#6D597A" 
+                                                        strokeWidth="4" 
+                                                        strokeLinejoin="round"
+                                                    />
+                                                    {/* The "Eraser" Patch - Sits on top to hide the border connection */}
+                                                    {/* This rectangle is white and sits exactly over the top border of the tail */}
+                                                    <rect x="-2" y="-5" width="34" height="8" fill="white" stroke="none" />
+                                                </svg>
+                                            ) : (
+                                                <div className="flex flex-col items-center gap-1.5 -mt-3">
+                                                     {/* Thought Bubbles */}
+                                                    <div className="w-3.5 h-3.5 bg-white border-[3px] border-[#6D597A] rounded-full"/>
+                                                    <div className="w-2 h-2 bg-white border-[3px] border-[#6D597A] rounded-full"/>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
+                            {/* --- CONTROLS --- */}
+                            {selectedId === item.id && !isSaving && (
+                                <>
+                                    <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { locked: !item.locked })}} className={`absolute -top-3 -left-3 p-1.5 rounded-full shadow-md border-2 border-white hover:scale-110 transition-transform ${item.locked ? 'bg-red-500 text-white' : 'bg-yellow-400 text-white'}`}>{item.locked ? <Lock size={12}/> : <Unlock size={12}/>}</button>
+                                    
+                                    {!item.locked && (
+                                        <button onPointerDown={(e) => {e.stopPropagation(); onRemoveItem(item.id)}} className="absolute -top-3 -right-3 bg-red-500 text-white p-1.5 rounded-full shadow-md border-2 border-white hover:scale-110"><Trash2 size={12}/></button>
+                                    )}
+
+                                    {!item.locked && item.type === 'bubble' && (
+                                        <>
+                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech' })}} className="absolute -bottom-3 -right-3 bg-blue-400 text-white p-1.5 rounded-full shadow-md border-2 border-white hover:scale-110"><RefreshCw size={12}/></button>
+                                            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 bg-white/80 p-1 rounded-full flex gap-2 border border-pink-200 backdrop-blur-sm pointer-events-auto">
+                                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) - 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCcw size={14}/></button>
+                                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) + 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCw size={14}/></button>
+                                            </div>
+                                        </>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
-                </div>
-            ))}
-
+                );
+            })}
         </div>
     </div>
   );
