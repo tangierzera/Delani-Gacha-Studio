@@ -122,28 +122,40 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // --- CAPTURE LOGIC (SIMPLIFIED & ROBUST) ---
+  // --- CAPTURE LOGIC (ROBUST CONFIGURATION) ---
   const handleCaptureScene = async () => {
     setSelectedId(null);
     setIsCapturing(true);
 
-    // Small delay to let React remove UI elements before capture
     setTimeout(async () => {
         const stageElement = document.getElementById('canvas-area');
         if (!stageElement) { setIsCapturing(false); return; }
 
         try {
+            // Force strict dimensions for the capture to avoid scroll offset bugs
+            const rect = stageElement.getBoundingClientRect();
+
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                scale: 3, // High Quality
+                scale: 3, // High Resolution
                 backgroundColor: null,
                 logging: false,
+                width: rect.width,
+                height: rect.height,
+                scrollX: 0,
+                scrollY: 0,
+                // Specifically fixes text baseline shifting in some browsers
                 onclone: (clonedDoc) => {
-                    // With the new robust Stage CSS (flexbox + explicit padding), 
-                    // we don't need heavy hacks. Just ensuring images fit.
                     const images = clonedDoc.querySelectorAll('img');
                     images.forEach((img: any) => img.style.objectFit = 'contain');
+                    
+                    // Double ensure bubble text is visible and wraps
+                    const bubbles = clonedDoc.querySelectorAll('[data-bubble-text]');
+                    bubbles.forEach((b: any) => {
+                        b.style.overflowWrap = 'anywhere';
+                        b.style.whiteSpace = 'pre-wrap';
+                    });
                 }
             });
             

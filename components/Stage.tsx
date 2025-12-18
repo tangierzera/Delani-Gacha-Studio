@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SceneItem, AspectRatio } from '../types';
 import { Lock, Unlock, RefreshCw, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
 
@@ -197,19 +197,20 @@ const Stage: React.FC<StageProps> = ({
                                 <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2 leading-none">{item.emoji}</div>
                             )}
 
-                            {/* --- BUBBLE (PRO GACHA STYLE) --- */}
+                            {/* --- BUBBLE (PROFESSIONAL FIX) --- */}
                             {item.type === 'bubble' && (
-                                <div className="relative flex flex-col items-center">
-                                    {/* The Bubble Container */}
+                                /* Container with SAFE PADDING ensures tail is never cut off by html2canvas clipping */
+                                <div className="relative p-12 -m-12 flex flex-col items-center justify-center">
+                                    
+                                    {/* The Actual Bubble Box */}
                                     <div 
                                         className={`
                                             relative z-20 bg-white border-[4px] border-[#6D597A] shadow-sm
-                                            ${item.bubbleStyle === 'thought' ? 'rounded-[3rem] px-6 py-4' : 'rounded-3xl px-5 py-3'}
+                                            ${item.bubbleStyle === 'thought' ? 'rounded-[2rem] px-6 py-4' : 'rounded-3xl px-5 py-3'}
                                             flex items-center justify-center
                                         `}
                                         style={{ 
-                                            // FIX 1: Max width is strictly relative to viewport (prevents screen overflow)
-                                            maxWidth: 'min(70vw, 300px)',
+                                            maxWidth: 'min(70vw, 280px)', 
                                             width: 'max-content',
                                             minWidth: '60px'
                                         }}
@@ -223,11 +224,11 @@ const Stage: React.FC<StageProps> = ({
                                             className="outline-none text-center font-bold text-[#6D597A]"
                                             onPointerDown={(e) => e.stopPropagation()}
                                             style={{ 
-                                                // FIX 2: Overflow-wrap: anywhere forces long strings "AHDUW..." to break
+                                                // THE FIX: "anywhere" breaks even long strings.
                                                 overflowWrap: 'anywhere',
                                                 wordBreak: 'break-word',
                                                 whiteSpace: 'pre-wrap',
-                                                lineHeight: '1.2',
+                                                lineHeight: '1.2', // Consistent line height
                                                 fontSize: '16px',
                                                 width: '100%',
                                                 cursor: item.locked ? 'default' : 'text'
@@ -237,34 +238,46 @@ const Stage: React.FC<StageProps> = ({
                                         </div>
                                     </div>
                                     
-                                    {/* The Tail - Absolutely positioned relative to the center */}
+                                    {/* The Tail Wrapper - Rotates around the center of the bubble */}
                                     <div 
-                                        className="absolute inset-0 z-30 pointer-events-none flex items-center justify-center"
+                                        className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center" 
                                         style={{ 
                                             transform: `rotate(${item.tailAngle || 180}deg)`,
+                                            // The rotation origin is strictly the center of the whole padded container
                                             transformOrigin: 'center center'
                                         }}
                                     >
-                                        {/* Push tail to the edge (approx distance from center) */}
-                                        <div className="translate-y-[calc(50%+10px)]" style={{ marginTop: item.bubbleStyle === 'thought' ? '20px' : '15px' }}>
+                                        {/* Push tail outwards. The value matches approx half bubble height + offset */}
+                                        <div className="translate-y-[calc(50%+4px)]" style={{ 
+                                            marginTop: item.bubbleStyle === 'thought' ? '20px' : '15px'
+                                        }}>
                                             {item.bubbleStyle === 'speech' ? (
-                                                <svg width="30" height="25" viewBox="0 0 30 25" style={{ overflow: 'visible' }}>
-                                                    {/* The Main Triangle (White with Purple Border) */}
-                                                    {/* We draw a path that looks like a V but closed at top with a curve matching bubble */}
-                                                    <path 
-                                                        d="M0,0 L15,25 L30,0" 
-                                                        fill="white" 
-                                                        stroke="#6D597A" 
-                                                        strokeWidth="4" 
-                                                        strokeLinejoin="round"
-                                                    />
-                                                    {/* The "Eraser" Patch - Sits on top to hide the border connection */}
-                                                    {/* This rectangle is white and sits exactly over the top border of the tail */}
-                                                    <rect x="-2" y="-5" width="34" height="8" fill="white" stroke="none" />
-                                                </svg>
+                                                <div className="relative flex flex-col items-center">
+                                                     {/* 
+                                                        GACHA TAIL TRICK: 
+                                                        We use a simple SVG triangle. 
+                                                        We create a white rectangle to cover the border intersection.
+                                                        This is the most reliable way to render in html2canvas without artifacts.
+                                                     */}
+                                                     
+                                                     {/* 1. The Cover Patch (Hides the bubble border where tail meets) */}
+                                                     <div className="w-6 h-4 bg-white absolute -top-3 z-30" />
+                                                     
+                                                     {/* 2. The Tail SVG */}
+                                                     <svg width="30" height="25" viewBox="0 0 30 25" className="z-20 overflow-visible relative">
+                                                        <path 
+                                                            d="M0,0 L15,25 L30,0" 
+                                                            fill="white" 
+                                                            stroke="#6D597A" 
+                                                            strokeWidth="4" 
+                                                            strokeLinejoin="round"
+                                                        />
+                                                        {/* Inner white fill to ensure no border bleeds through on top */}
+                                                        <path d="M2,0 L15,22 L28,0 Z" fill="white" stroke="none" />
+                                                     </svg>
+                                                </div>
                                             ) : (
-                                                <div className="flex flex-col items-center gap-1.5 -mt-3">
-                                                     {/* Thought Bubbles */}
+                                                <div className="flex flex-col items-center gap-1.5 -mt-3 relative z-30">
                                                     <div className="w-3.5 h-3.5 bg-white border-[3px] border-[#6D597A] rounded-full"/>
                                                     <div className="w-2 h-2 bg-white border-[3px] border-[#6D597A] rounded-full"/>
                                                 </div>
