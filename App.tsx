@@ -122,7 +122,7 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // --- CAPTURE LOGIC (ROBUST CONFIGURATION) ---
+  // --- CAPTURE LOGIC (FIX FOR TEXT SPACING) ---
   const handleCaptureScene = async () => {
     setSelectedId(null);
     setIsCapturing(true);
@@ -132,7 +132,7 @@ const App: React.FC = () => {
         if (!stageElement) { setIsCapturing(false); return; }
 
         try {
-            // Force strict dimensions for the capture to avoid scroll offset bugs
+            // Get precise dimensions to avoid scrolling glitches
             const rect = stageElement.getBoundingClientRect();
 
             const canvas = await html2canvas(stageElement, {
@@ -145,16 +145,30 @@ const App: React.FC = () => {
                 height: rect.height,
                 scrollX: 0,
                 scrollY: 0,
-                // Specifically fixes text baseline shifting in some browsers
                 onclone: (clonedDoc) => {
+                    // 1. Fix Image containment
                     const images = clonedDoc.querySelectorAll('img');
                     images.forEach((img: any) => img.style.objectFit = 'contain');
                     
-                    // Double ensure bubble text is visible and wraps
+                    // 2. CRITICAL FIX FOR SPEECH BUBBLE SPACING
+                    // HTML2Canvas often adds extra space to contentEditable elements.
+                    // We convert them to static text blocks in the clone.
                     const bubbles = clonedDoc.querySelectorAll('[data-bubble-text]');
                     bubbles.forEach((b: any) => {
+                        const rawText = b.innerText; 
+                        
+                        // Disable editing artifacts
+                        b.removeAttribute('contenteditable');
                         b.style.overflowWrap = 'anywhere';
                         b.style.whiteSpace = 'pre-wrap';
+                        b.style.display = 'block';
+                        b.style.margin = '0';
+                        b.style.padding = '0';
+                        // Force line height again to be sure
+                        b.style.lineHeight = '1.2';
+                        
+                        // Remove trailing newlines which cause the "bottom gap"
+                        b.innerText = rawText.trim(); 
                     });
                 }
             });

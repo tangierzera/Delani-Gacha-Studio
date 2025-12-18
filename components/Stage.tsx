@@ -231,6 +231,8 @@ const Stage: React.FC<StageProps> = ({
                                                 lineHeight: '1.2', // Consistent line height
                                                 fontSize: '16px',
                                                 width: '100%',
+                                                margin: 0,
+                                                padding: 0,
                                                 cursor: item.locked ? 'default' : 'text'
                                             }} 
                                         >
@@ -261,6 +263,7 @@ const Stage: React.FC<StageProps> = ({
                                                      */}
                                                      
                                                      {/* 1. The Cover Patch (Hides the bubble border where tail meets) */}
+                                                     {/* Increased Z-Index to ensure it covers properly */}
                                                      <div className="w-6 h-4 bg-white absolute -top-3 z-30" />
                                                      
                                                      {/* 2. The Tail SVG */}
