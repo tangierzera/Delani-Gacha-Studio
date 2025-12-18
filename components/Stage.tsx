@@ -229,7 +229,7 @@ const Stage: React.FC<StageProps> = ({
                                 <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2 leading-none">{item.emoji}</div>
                             )}
 
-                            {/* --- DIALOGUE (REFACTORED FOR 360 TAIL & DASHED BORDER) --- */}
+                            {/* --- DIALOGUE (PURE CSS - ROBUST SAVING) --- */}
                             {item.type === 'dialogue' && (
                                 <div 
                                     className="relative flex flex-col items-start"
@@ -253,73 +253,26 @@ const Stage: React.FC<StageProps> = ({
                                         </div>
                                     </div>
 
-                                    {/* Dialogue Container */}
+                                    {/* Dialogue Box Wrapper */}
                                     <div className="relative w-full z-10 pt-4">
                                         
-                                        {/* 1. TAIL LAYER - Orbiting Wrapper */}
-                                        {/* We use an inset-0 absolute container that ROTATES. 
-                                            The tail is placed at the 'bottom' of this rotating container. 
-                                            This allows 360 rotation without math.
-                                        */}
+                                        {/* The Box */}
                                         <div 
-                                            className="absolute inset-0 pointer-events-none z-0 flex items-end justify-center"
-                                            style={{ 
-                                                transform: `rotate(${tailAngle}deg)`,
-                                                // Negative margin expands the orbit slightly so tail sits on border center
-                                                margin: '-6px' 
+                                            className="relative bg-white z-10 p-5 min-h-[80px] shadow-sm"
+                                            style={{
+                                                borderWidth: '3px',
+                                                borderStyle: 'dashed',
+                                                borderColor: item.nameColor || '#FF8FAB',
+                                                borderRadius: isSpeech ? '20px' : '30px'
                                             }}
                                         >
-                                            {/* The Tail Graphic */}
-                                            <div 
-                                                className="translate-y-[100%] drop-shadow-sm" 
-                                                style={{ 
-                                                    // Slight adjustment to align perfectly with border
-                                                    marginTop: isSpeech ? '-4px' : '4px',
-                                                    transform: isSpeech ? 'none' : 'rotate(180deg)' // Thought bubbles point UP usually? Or dots fall down.
-                                                }}
-                                            >
-                                                {isSpeech ? (
-                                                    <svg width="30" height="30" viewBox="0 0 30 30" className="overflow-visible">
-                                                         {/* White Mask Patch to hide the Bubble Border behind the tail connection */}
-                                                        <rect x="5" y="-6" width="20" height="10" fill="white" />
-                                                        
-                                                        {/* The Tail Shape */}
-                                                        <path 
-                                                            d="M5,-2 Q15,28 25,-2" 
-                                                            fill="white" 
-                                                            stroke={item.nameColor || '#FF8FAB'} 
-                                                            strokeWidth="3" 
-                                                            strokeDasharray="8 6" 
-                                                            strokeLinecap="round"
-                                                        />
-                                                    </svg>
-                                                ) : (
-                                                    <div className="flex flex-col gap-1 items-center pt-2">
-                                                        <div className="w-3 h-3 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* 2. BUBBLE BOX LAYER */}
-                                        <div className="relative z-10">
-                                            {/* We use a div for the visual box to support dashed borders easily with CSS */}
-                                            <div 
-                                                className={`absolute inset-0 w-full h-full bg-white/95 border-[3px] shadow-sm pointer-events-none ${isSpeech ? 'rounded-[2rem]' : 'rounded-[2.5rem]'}`}
-                                                style={{ 
-                                                    borderColor: item.nameColor || '#FF8FAB',
-                                                    borderStyle: 'dashed'
-                                                }}
-                                            />
-
-                                            {/* 3. TEXT LAYER */}
+                                            {/* Text */}
                                             <div 
                                                 data-dialogue-text 
                                                 contentEditable={!item.locked && !isSaving}
                                                 suppressContentEditableWarning
                                                 onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
-                                                className="relative z-20 outline-none text-gray-700 font-medium text-lg w-full p-5 min-h-[80px]"
+                                                className="outline-none text-gray-700 font-medium text-lg w-full relative z-20"
                                                 onPointerDown={(e) => e.stopPropagation()}
                                                 style={{ 
                                                     overflowWrap: 'break-word',
@@ -330,6 +283,37 @@ const Stage: React.FC<StageProps> = ({
                                                 }} 
                                             >
                                                 {item.text}
+                                            </div>
+                                        </div>
+
+                                        {/* The Tail Wrapper - Rotates 360 */}
+                                        <div 
+                                            className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center"
+                                        >
+                                            <div 
+                                                className="w-full h-full relative"
+                                                style={{ transform: `rotate(${tailAngle}deg)` }}
+                                            >
+                                                {/* The Actual Tail Item - Pushed to bottom edge */}
+                                                <div className="absolute bottom-[-9px] left-1/2 -translate-x-1/2">
+                                                     {isSpeech ? (
+                                                        <div 
+                                                            className="w-5 h-5 bg-white transform rotate-45"
+                                                            style={{
+                                                                borderRightWidth: '3px',
+                                                                borderBottomWidth: '3px',
+                                                                borderRightStyle: 'dashed',
+                                                                borderBottomStyle: 'dashed',
+                                                                borderColor: item.nameColor || '#FF8FAB',
+                                                            }}
+                                                        />
+                                                     ) : (
+                                                        <div className="flex flex-col gap-1 items-center pt-2 transform rotate-180">
+                                                            <div className="w-3 h-3 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
+                                                        </div>
+                                                     )}
+                                                </div>
                                             </div>
                                         </div>
 
