@@ -21,6 +21,8 @@ export interface SceneItem {
   text?: string;
   dialogueName?: string;
   nameColor?: string;
+  dialogueStyle?: 'speech' | 'thought'; // New property
+  tailAngle?: number; // Supports 360 degree rotation
 }
 
 export interface BackgroundImage {

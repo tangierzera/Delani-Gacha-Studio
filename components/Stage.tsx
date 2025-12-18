@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SceneItem, AspectRatio } from '../types';
-import { Lock, Unlock, Trash2, Palette } from 'lucide-react';
+import { Lock, Unlock, Trash2, Cloud, MessageSquare, RotateCw, RotateCcw } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -15,7 +15,7 @@ interface StageProps {
   onRemoveItem: (id: string) => void;
 }
 
-const NAME_COLORS = ['#FF8FAB', '#6D597A', '#3B82F6', '#EF4444', '#10B981', '#F59E0B'];
+const NAME_COLORS = ['#FF8FAB', '#6D597A', '#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#333333'];
 
 const Stage: React.FC<StageProps> = ({ 
   items, backgroundUrl, selectedId, isBgLocked, isSaving, aspectRatio,
@@ -175,6 +175,11 @@ const Stage: React.FC<StageProps> = ({
             {items.map((item) => {
                 if (item.visible === false) return null;
 
+                const isSpeech = item.dialogueStyle !== 'thought';
+                const tailAngle = item.tailAngle || 0;
+                // Calculate z-index: Higher if selected, else base layer
+                const activeZ = selectedId === item.id ? 9999 : item.zIndex;
+
                 return (
                     <div
                         key={item.id}
@@ -182,8 +187,7 @@ const Stage: React.FC<StageProps> = ({
                         style={{
                             transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
                             cursor: item.locked ? 'default' : 'grab',
-                            zIndex: selectedId === item.id ? 9999 : 'auto',
-                            // Ensure Dialogue is usually wide
+                            zIndex: activeZ,
                             width: item.type === 'dialogue' ? 'auto' : 'auto'
                         }}
                         onPointerDown={(e) => handlePointerDown(e, item.id)}
@@ -201,15 +205,15 @@ const Stage: React.FC<StageProps> = ({
                                 <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2 leading-none">{item.emoji}</div>
                             )}
 
-                            {/* --- PROFESSIONAL GACHA DIALOGUE BOX --- */}
+                            {/* --- DIALOGUE BOX (Refactored for 360 Tail) --- */}
                             {item.type === 'dialogue' && (
                                 <div 
                                     className="relative flex flex-col items-start"
                                     style={{ width: 'min(80vw, 400px)' }}
                                 >
-                                    {/* Name Plate - Floats on top border */}
+                                    {/* Name Plate */}
                                     <div 
-                                        className="relative z-20 ml-4 mb-[-14px] px-4 py-1 rounded-full border-2 border-white shadow-md flex items-center justify-center min-w-[80px]"
+                                        className={`relative z-20 ml-6 mb-[-12px] px-4 py-1 rounded-full border-2 border-white shadow-md flex items-center justify-center min-w-[80px] transition-colors`}
                                         style={{ backgroundColor: item.nameColor || '#FF8FAB' }}
                                     >
                                         <div
@@ -218,39 +222,84 @@ const Stage: React.FC<StageProps> = ({
                                             suppressContentEditableWarning
                                             onBlur={(e) => onUpdateItem(item.id, { dialogueName: e.currentTarget.innerText })}
                                             onPointerDown={(e) => e.stopPropagation()}
-                                            className="font-bold text-white text-sm outline-none whitespace-nowrap"
+                                            className="font-bold text-white text-sm outline-none whitespace-nowrap leading-relaxed"
                                             style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}
                                         >
                                             {item.dialogueName}
                                         </div>
                                     </div>
 
-                                    {/* Main Box */}
-                                    <div className="w-full bg-white/95 border-[3px] rounded-2xl shadow-lg relative z-10 p-4 pt-5 pb-3 min-h-[80px] flex flex-col justify-start"
-                                         style={{ borderColor: item.nameColor || '#FF8FAB' }}
-                                         data-dialogue-box
-                                    >
-                                        <div 
-                                            data-dialogue-text 
-                                            contentEditable={!item.locked && !isSaving}
-                                            suppressContentEditableWarning
-                                            onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
-                                            className="outline-none text-gray-700 font-medium text-lg leading-snug w-full"
-                                            onPointerDown={(e) => e.stopPropagation()}
-                                            style={{ 
-                                                overflowWrap: 'anywhere',
-                                                whiteSpace: 'pre-wrap',
-                                                cursor: item.locked ? 'default' : 'text'
-                                            }} 
-                                        >
-                                            {item.text}
-                                        </div>
+                                    {/* Main Bubble Container */}
+                                    <div className={`relative w-full z-10`}>
                                         
-                                        {/* Next Arrow Decoration */}
-                                        <div className="absolute bottom-2 right-3 animate-bounce-slow">
-                                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px]" 
-                                                 style={{ borderTopColor: item.nameColor || '#FF8FAB' }}/>
+                                        {/* 1. The Box */}
+                                        <div className={`
+                                                w-full bg-white/95 border-[3px] shadow-sm relative z-10 p-4 pt-5 pb-3 min-h-[80px] flex flex-col justify-start
+                                                ${isSpeech ? 'rounded-[2rem] border-dashed' : 'rounded-[2.5rem] border-dashed'}
+                                             `}
+                                             style={{ borderColor: item.nameColor || '#FF8FAB' }}
+                                             data-dialogue-box
+                                        >
+                                            <div 
+                                                data-dialogue-text 
+                                                contentEditable={!item.locked && !isSaving}
+                                                suppressContentEditableWarning
+                                                onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
+                                                className="outline-none text-gray-700 font-medium text-lg w-full"
+                                                onPointerDown={(e) => e.stopPropagation()}
+                                                style={{ 
+                                                    overflowWrap: 'break-word',
+                                                    wordBreak: 'break-word',
+                                                    whiteSpace: 'pre-wrap',
+                                                    cursor: item.locked ? 'default' : 'text',
+                                                    lineHeight: '1.25', 
+                                                }} 
+                                            >
+                                                {item.text}
+                                            </div>
                                         </div>
+
+                                        {/* 2. The Tail Wrapper 
+                                            This wrapper matches the box size exactly (inset-0).
+                                            When we rotate it, "bottom" becomes the corresponding side.
+                                            This is the 'Senior Developer' trick to make tails follow rectangular perimeters.
+                                        */}
+                                        <div 
+                                            className="absolute inset-0 pointer-events-none z-20 flex justify-center items-end"
+                                            style={{ 
+                                                transform: `rotate(${tailAngle}deg)`,
+                                                // Negative margin pulls it slightly larger so corners don't clip inside
+                                                margin: '-2px'
+                                            }}
+                                        >
+                                            {/* The Tail Graphic - Pushed down to the edge */}
+                                            {isSpeech ? (
+                                                <div className="relative translate-y-[100%] drop-shadow-sm" style={{ marginBottom: '-3px' }}>
+                                                    {/* SVG Tail that overlaps the border nicely */}
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" className="overflow-visible">
+                                                        {/* White filler to hide background behind tail */}
+                                                        <path d="M4,0 Q12,20 20,0 Z" fill="white" />
+                                                        {/* The outline - dashed matching the box */}
+                                                        <path 
+                                                            d="M4,0 Q12,20 20,0" 
+                                                            fill="none" 
+                                                            stroke={item.nameColor || '#FF8FAB'} 
+                                                            strokeWidth="3" 
+                                                            strokeDasharray="6 4"
+                                                            strokeLinecap="round"
+                                                        />
+                                                        {/* White patch to cover the box border line at connection point */}
+                                                        <rect x="5" y="-3" width="14" height="6" fill="white" />
+                                                    </svg>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-1 items-center translate-y-[100%] pt-2">
+                                                    <div className="w-3 h-3 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-white border-[3px]" style={{ borderColor: item.nameColor || '#FF8FAB' }}/>
+                                                </div>
+                                            )}
+                                        </div>
+
                                     </div>
                                 </div>
                             )}
@@ -265,16 +314,42 @@ const Stage: React.FC<StageProps> = ({
                                     )}
 
                                     {!item.locked && item.type === 'dialogue' && (
-                                        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-white/90 p-1.5 rounded-full shadow-md border border-pink-100 flex gap-2 pointer-events-auto z-50">
-                                            {NAME_COLORS.map(color => (
+                                        <>
+                                            {/* Tail Rotation Controls */}
+                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex gap-2 pointer-events-auto">
                                                 <button 
-                                                    key={color}
-                                                    onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { nameColor: color })}}
-                                                    className={`w-5 h-5 rounded-full border border-gray-200 ${item.nameColor === color ? 'ring-2 ring-gray-400 scale-110' : ''}`}
-                                                    style={{ backgroundColor: color }}
-                                                />
-                                            ))}
-                                        </div>
+                                                    onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) - 15 })}}
+                                                    className="bg-white text-pink-500 p-1.5 rounded-full shadow border border-pink-100"
+                                                >
+                                                    <RotateCcw size={14}/>
+                                                </button>
+                                                <button 
+                                                    onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) + 15 })}}
+                                                    className="bg-white text-pink-500 p-1.5 rounded-full shadow border border-pink-100"
+                                                >
+                                                    <RotateCw size={14}/>
+                                                </button>
+                                                 {/* Style Toggle */}
+                                                <button 
+                                                    onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { dialogueStyle: isSpeech ? 'thought' : 'speech' })}}
+                                                    className="bg-blue-500 text-white p-1.5 rounded-full shadow border-2 border-white"
+                                                >
+                                                    {isSpeech ? <MessageSquare size={14}/> : <Cloud size={14}/>}
+                                                </button>
+                                            </div>
+
+                                            {/* Color Palette */}
+                                            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-white/90 p-1.5 rounded-full shadow-md border border-pink-100 flex gap-2 pointer-events-auto z-50">
+                                                {NAME_COLORS.map(color => (
+                                                    <button 
+                                                        key={color}
+                                                        onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { nameColor: color })}}
+                                                        className={`w-5 h-5 rounded-full border border-gray-200 ${item.nameColor === color ? 'ring-2 ring-gray-400 scale-110' : ''}`}
+                                                        style={{ backgroundColor: color }}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </>
                                     )}
                                 </>
                             )}

@@ -53,6 +53,8 @@ const App: React.FC = () => {
       text: type === 'dialogue' ? 'Digite a fala aqui...' : undefined,
       dialogueName: type === 'dialogue' ? 'Nome' : undefined,
       nameColor: type === 'dialogue' ? '#FF8FAB' : undefined,
+      dialogueStyle: 'speech', // Default
+      tailAngle: 0, // Default bottom
       emoji: type === 'sticker' ? payload : undefined,
     };
     
@@ -128,7 +130,7 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // --- CAPTURE LOGIC (PROFESSIONAL GACHA FIX) ---
+  // --- CAPTURE LOGIC (SENIOR DEVELOPER FIX) ---
   const handleCaptureScene = async () => {
     setSelectedId(null);
     setIsCapturing(true);
@@ -143,28 +145,37 @@ const App: React.FC = () => {
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                scale: 3, 
+                scale: 3, // High Resolution
                 backgroundColor: null,
                 logging: false,
                 width: rect.width,
                 height: rect.height,
                 scrollX: 0,
-                scrollY: 0,
+                scrollY: -window.scrollY, // Fix offset issues
                 onclone: (clonedDoc) => {
                     // 1. Fix Image containment
                     const images = clonedDoc.querySelectorAll('img');
                     images.forEach((img: any) => img.style.objectFit = 'contain');
                     
-                    // 2. DIALOGUE FIX: Ensure Name and Text match exactly
+                    // 2. DIALOGUE FIX (The "Spacing" Killer)
                     const processTextField = (selector: string) => {
                         const elements = clonedDoc.querySelectorAll(selector);
                         elements.forEach((el: any) => {
                             const rawText = el.innerText;
+                            
+                            // Strip ALL editable attributes that cause weird rendering
                             el.removeAttribute('contenteditable');
-                            el.style.overflowWrap = 'anywhere';
-                            el.style.whiteSpace = 'pre-wrap';
+                            
+                            // FORCE styles to prevent browser differences
                             el.style.display = 'block';
                             el.style.margin = '0';
+                            el.style.padding = '0';
+                            el.style.overflowWrap = 'break-word'; // Safer than anywhere
+                            el.style.wordBreak = 'break-word';
+                            el.style.whiteSpace = 'pre-wrap'; // Preserves actual lines, no fake wrapping
+                            el.style.lineHeight = '1.25'; // Match editor exactly
+                            
+                            // Ensure text is trimmed of trailing newlines which cause "bottom gaps"
                             el.innerText = rawText.trim(); 
                         });
                     }
