@@ -327,7 +327,7 @@ const App: React.FC = () => {
                     <button onClick={() => setShowBgSearch(false)} className="bg-pink-100 p-2 rounded-full text-pink-400"><X/></button>
                 </div>
                 <div className="p-4 bg-white/50 flex gap-2">
-                    <input value={bgQuery} onChange={(e) => setBgQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearchBackground()} placeholder="Ex: Quarto anime rosa..." className="flex-1 p-3 rounded-xl border-2 border-pink-200 outline-none"/>
+                    <input value={bgQuery} onChange={(e) => setBgQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearchBackground()} placeholder="Ex: Quarto anime rosa..." className="flex-1 p-3 rounded-xl border-2 border-pink-200 outline-none bg-white text-gray-800 placeholder-gray-400 shadow-inner"/>
                     <button onClick={handleSearchBackground} disabled={isSearching} className="bg-pink-400 text-white px-6 rounded-xl font-bold">{isSearching ? '...' : 'Buscar'}</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
