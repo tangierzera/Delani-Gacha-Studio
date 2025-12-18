@@ -3,7 +3,7 @@ import { SceneItem, BackgroundImage } from './types';
 import Stage from './components/Stage';
 import EraserModal from './components/EraserModal';
 import { searchPinterestBackgrounds } from './services/serpApiService';
-import { ImagePlus, MessageSquarePlus, Image as ImageIcon, Download, Scissors, Wand2, X, Heart, Star, Sparkles } from 'lucide-react';
+import { ImagePlus, MessageSquarePlus, Image as ImageIcon, Download, Scissors, Wand2, X, Heart, Star, Sparkles, Eye, EyeOff, Menu } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 const App: React.FC = () => {
@@ -18,17 +18,21 @@ const App: React.FC = () => {
   const [bgResults, setBgResults] = useState<BackgroundImage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
+  // UI Visibility State (Toggle to hide menus)
+  const [uiVisible, setUiVisible] = useState(true);
+  
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Handlers ---
 
   const handleAddItem = (type: 'character' | 'bubble', src?: string) => {
+    // Spawn slightly higher (y - 100) to avoid being covered by the bottom bar initially
     const newItem: SceneItem = {
       id: Date.now().toString(),
       type,
       x: window.innerWidth / 2 - 50,
-      y: window.innerHeight / 2 - 50,
+      y: window.innerHeight / 2 - 120, 
       scale: 1,
       rotation: 0,
       zIndex: items.length + 1,
@@ -82,10 +86,12 @@ const App: React.FC = () => {
 
   // SAVE IMAGE LOGIC
   const handleSaveScene = () => {
-    // 1. Deselect everything so controls don't show up
+    // 1. Temporarily hide UI elements and selection for the screenshot
+    const wasUiVisible = uiVisible;
+    setUiVisible(false); // Hide UI for clean shot
     setSelectedId(null);
 
-    // 2. Wait a moment for React to render the deselection
+    // 2. Wait a moment for React to render the clean state
     setTimeout(async () => {
         const stageElement = document.getElementById('stage-container');
         if (stageElement) {
@@ -104,33 +110,42 @@ const App: React.FC = () => {
                 link.click();
             } catch (err) {
                 console.error("Erro ao salvar:", err);
-                alert("Ops! Não consegui salvar a imagem. Tente novamente ou verifique se as imagens do Pinterest carregaram bem.");
+                alert("Ops! Não consegui salvar a imagem. Tente novamente.");
+            } finally {
+                // Restore UI state
+                setUiVisible(wasUiVisible);
             }
         }
-    }, 100);
+    }, 300);
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gacha-cream font-sans overflow-hidden">
-      {/* Header */}
-      <header className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
-        <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border-2 border-gacha-pink pointer-events-auto flex items-center gap-2">
-            <Heart size={20} className="text-gacha-hot fill-gacha-hot animate-pulse" />
-            <h1 className="text-lg md:text-xl font-bold text-gacha-text">
-            Delani Gacha
-            </h1>
+    // Use h-[100dvh] (Dynamic Viewport Height) to fix mobile browser bar issues
+    <div className="flex flex-col h-[100dvh] bg-gacha-cream font-sans overflow-hidden relative">
+      
+      {/* Header - Slides up when UI hidden */}
+      <header 
+        className={`absolute top-0 left-0 right-0 z-30 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible ? 'translate-y-0' : '-translate-y-full'}`}
+      >
+        <div className="flex justify-between items-center p-4">
+            <div className="bg-white/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border-2 border-gacha-pink pointer-events-auto flex items-center gap-2">
+                <Heart size={20} className="text-gacha-hot fill-gacha-hot animate-pulse" />
+                <h1 className="text-lg md:text-xl font-bold text-gacha-text">
+                Delani Gacha
+                </h1>
+            </div>
+            
+            <button 
+                onClick={handleSaveScene}
+                className="bg-gradient-to-r from-gacha-hot to-purple-400 text-white px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 pointer-events-auto hover:scale-105 transition-transform border-2 border-white"
+            >
+                <Download size={18} /> <span className="hidden md:inline">Salvar</span>
+            </button>
         </div>
-        
-        <button 
-            onClick={handleSaveScene}
-            className="bg-gradient-to-r from-gacha-hot to-purple-400 text-white px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 pointer-events-auto hover:scale-105 transition-transform border-2 border-white"
-        >
-            <Download size={18} /> <span className="hidden md:inline">Salvar</span>
-        </button>
       </header>
 
       {/* Main Stage */}
-      <main className="flex-1 relative touch-none">
+      <main className="flex-1 relative touch-none w-full h-full">
         <Stage 
           items={items}
           backgroundUrl={background}
@@ -141,17 +156,30 @@ const App: React.FC = () => {
         />
       </main>
 
-      {/* Toolbar */}
-      <footer className="absolute bottom-6 left-0 right-0 z-20 flex justify-center pointer-events-none">
-        <div className="bg-white/90 backdrop-blur-xl shadow-2xl rounded-3xl p-2 px-6 flex items-center gap-4 pointer-events-auto border-2 border-white ring-2 ring-gacha-pink/20">
+      {/* "Show UI" Toggle Button (Only visible when UI is hidden) */}
+      {!uiVisible && (
+          <button 
+            onClick={() => setUiVisible(true)}
+            className="absolute bottom-6 right-6 z-40 bg-white/50 backdrop-blur-sm p-3 rounded-full shadow-lg border-2 border-white/50 text-gacha-text hover:bg-white transition-all animate-fade-in"
+          >
+              <Eye size={24} />
+          </button>
+      )}
+
+      {/* Toolbar Footer - Slides down when UI hidden */}
+      <footer 
+        className={`absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center justify-end pb-6 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible ? 'translate-y-0' : 'translate-y-[150%]'}`}
+      >
+        {/* Main Control Bar */}
+        <div className="bg-white/90 backdrop-blur-xl shadow-2xl rounded-3xl p-2 px-4 md:px-6 flex items-center gap-3 md:gap-6 pointer-events-auto border-2 border-white ring-2 ring-gacha-pink/20 mx-4 max-w-full overflow-x-auto no-scrollbar">
             
             {/* Add Character Button */}
             <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="group relative flex flex-col items-center justify-center gap-1 w-16 h-16 transition-all hover:-translate-y-2"
+                className="group relative flex flex-col items-center justify-center gap-1 w-14 h-14 md:w-16 md:h-16 transition-all hover:-translate-y-2 flex-shrink-0"
             >
-                <div className="w-12 h-12 rounded-full bg-gacha-pink flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-gacha-hot transition-colors">
-                    <ImagePlus size={24} className="text-white" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gacha-pink flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-gacha-hot transition-colors">
+                    <ImagePlus size={20} className="text-white md:w-6 md:h-6" />
                 </div>
                 <span className="text-[10px] font-bold text-gacha-text bg-white px-2 py-0.5 rounded-full shadow-sm">Boneco</span>
             </button>
@@ -166,10 +194,10 @@ const App: React.FC = () => {
             {/* Background Button */}
             <button 
                 onClick={() => setShowBgSearch(true)}
-                className="group relative flex flex-col items-center justify-center gap-1 w-16 h-16 transition-all hover:-translate-y-2"
+                className="group relative flex flex-col items-center justify-center gap-1 w-14 h-14 md:w-16 md:h-16 transition-all hover:-translate-y-2 flex-shrink-0"
             >
-                <div className="w-12 h-12 rounded-full bg-gacha-lavender flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-purple-400 transition-colors">
-                    <ImageIcon size={24} className="text-white" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gacha-lavender flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-purple-400 transition-colors">
+                    <ImageIcon size={20} className="text-white md:w-6 md:h-6" />
                 </div>
                 <span className="text-[10px] font-bold text-gacha-text bg-white px-2 py-0.5 rounded-full shadow-sm">Fundo</span>
             </button>
@@ -177,13 +205,28 @@ const App: React.FC = () => {
             {/* Bubble Button */}
             <button 
                  onClick={() => handleAddItem('bubble')}
-                 className="group relative flex flex-col items-center justify-center gap-1 w-16 h-16 transition-all hover:-translate-y-2"
+                 className="group relative flex flex-col items-center justify-center gap-1 w-14 h-14 md:w-16 md:h-16 transition-all hover:-translate-y-2 flex-shrink-0"
             >
-                <div className="w-12 h-12 rounded-full bg-gacha-sky flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-blue-400 transition-colors">
-                    <MessageSquarePlus size={24} className="text-white" />
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gacha-sky flex items-center justify-center shadow-md group-hover:shadow-lg border-2 border-white group-hover:bg-blue-400 transition-colors">
+                    <MessageSquarePlus size={20} className="text-white md:w-6 md:h-6" />
                 </div>
                 <span className="text-[10px] font-bold text-gacha-text bg-white px-2 py-0.5 rounded-full shadow-sm">Fala</span>
             </button>
+
+            {/* Divider */}
+            <div className="w-px h-10 bg-gacha-pink/30 mx-1"></div>
+
+            {/* Hide UI Button */}
+            <button 
+                onClick={() => setUiVisible(false)}
+                className="flex flex-col items-center justify-center gap-1 w-12 h-14 transition-all opacity-70 hover:opacity-100 flex-shrink-0"
+            >
+                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center border-2 border-transparent hover:border-gacha-text/20">
+                     <EyeOff size={18} className="text-gacha-text" />
+                </div>
+                <span className="text-[9px] font-bold text-gacha-text">Esconder</span>
+            </button>
+
         </div>
       </footer>
 
@@ -200,8 +243,8 @@ const App: React.FC = () => {
 
       {/* Background Search Modal */}
       {showBgSearch && (
-        <div className="fixed inset-0 z-50 bg-gacha-text/40 backdrop-blur-sm flex items-end md:items-center justify-center animate-fade-in">
-            <div className="bg-white w-full md:w-[600px] h-[85vh] md:h-[600px] rounded-t-3xl md:rounded-3xl flex flex-col overflow-hidden animate-slide-up shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-gacha-text/40 backdrop-blur-sm flex items-end md:items-center justify-center animate-fade-in p-4 pb-0 md:p-0">
+            <div className="bg-white w-full md:w-[600px] h-[85dvh] md:h-[600px] rounded-t-3xl md:rounded-3xl flex flex-col overflow-hidden animate-slide-up shadow-2xl">
                 <div className="p-4 border-b border-gacha-pink/30 flex justify-between items-center bg-gacha-pink/10">
                     <div className="flex items-center gap-2">
                         <Sparkles size={20} className="text-gacha-hot" />
