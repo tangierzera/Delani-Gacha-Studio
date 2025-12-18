@@ -4,14 +4,7 @@ import Stage from './components/Stage';
 import EraserModal from './components/EraserModal';
 import { searchPinterestBackgrounds } from './services/serpApiService';
 import { ImagePlus, MessageSquarePlus, Image as ImageIcon, Download, Scissors, Wand2, X, Heart, Star, Sparkles } from 'lucide-react';
-
-// Declare html2canvas globally as it's loaded via CDN
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    html2canvas: any;
-  }
-}
+import html2canvas from 'html2canvas';
 
 const App: React.FC = () => {
   // --- State ---
@@ -95,12 +88,13 @@ const App: React.FC = () => {
     // 2. Wait a moment for React to render the deselection
     setTimeout(async () => {
         const stageElement = document.getElementById('stage-container');
-        if (stageElement && window.html2canvas) {
+        if (stageElement) {
             try {
-                const canvas = await window.html2canvas(stageElement, {
+                const canvas = await html2canvas(stageElement, {
                     useCORS: true, // Allow loading cross-origin images (like pinterest ones)
                     scale: 2, // High quality
-                    backgroundColor: null
+                    backgroundColor: null,
+                    logging: false
                 });
                 
                 // Create download link
@@ -110,10 +104,8 @@ const App: React.FC = () => {
                 link.click();
             } catch (err) {
                 console.error("Erro ao salvar:", err);
-                alert("Ops! Não consegui salvar a imagem agora. Tente novamente!");
+                alert("Ops! Não consegui salvar a imagem. Tente novamente ou verifique se as imagens do Pinterest carregaram bem.");
             }
-        } else {
-            alert("Biblioteca de imagem não carregada. Verifique sua conexão.");
         }
     }, 100);
   };
