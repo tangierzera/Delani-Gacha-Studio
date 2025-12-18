@@ -1,5 +1,5 @@
 
-export type ItemType = 'character' | 'bubble' | 'sticker';
+export type ItemType = 'character' | 'dialogue' | 'sticker';
 export type AspectRatio = '9:16' | '16:9' | '1:1';
 
 export interface SceneItem {
@@ -17,10 +17,10 @@ export interface SceneItem {
   src?: string; 
   emoji?: string; // For native stickers
   
-  // Bubble specific
+  // Dialogue specific (Gacha Style)
   text?: string;
-  bubbleStyle?: 'speech' | 'thought';
-  tailAngle?: number; 
+  dialogueName?: string;
+  nameColor?: string;
 }
 
 export interface BackgroundImage {

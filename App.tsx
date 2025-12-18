@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const charInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
-  const handleAddItem = (type: 'character' | 'bubble' | 'sticker', payload?: string) => {
+  const handleAddItem = (type: 'character' | 'dialogue' | 'sticker', payload?: string) => {
     const newItem: SceneItem = {
       id: Date.now().toString(),
       type,
@@ -50,11 +50,17 @@ const App: React.FC = () => {
       visible: true,
       locked: false,
       src: type === 'character' ? payload : undefined,
-      text: type === 'bubble' ? 'Texto...' : undefined,
+      text: type === 'dialogue' ? 'Digite a fala aqui...' : undefined,
+      dialogueName: type === 'dialogue' ? 'Nome' : undefined,
+      nameColor: type === 'dialogue' ? '#FF8FAB' : undefined,
       emoji: type === 'sticker' ? payload : undefined,
-      bubbleStyle: 'speech',
-      tailAngle: 180 // Default to bottom
     };
+    
+    // Auto-position dialogue at bottom
+    if (type === 'dialogue') {
+        newItem.y = 200; // Lower on screen
+    }
+
     setItems((prev) => [...prev, newItem]);
     setSelectedId(newItem.id);
     if(type !== 'sticker') setActiveTab('none'); 
@@ -122,7 +128,7 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // --- CAPTURE LOGIC (FIX FOR TEXT SPACING) ---
+  // --- CAPTURE LOGIC (PROFESSIONAL GACHA FIX) ---
   const handleCaptureScene = async () => {
     setSelectedId(null);
     setIsCapturing(true);
@@ -132,13 +138,12 @@ const App: React.FC = () => {
         if (!stageElement) { setIsCapturing(false); return; }
 
         try {
-            // Get precise dimensions to avoid scrolling glitches
             const rect = stageElement.getBoundingClientRect();
 
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                scale: 3, // High Resolution
+                scale: 3, 
                 backgroundColor: null,
                 logging: false,
                 width: rect.width,
@@ -150,26 +155,22 @@ const App: React.FC = () => {
                     const images = clonedDoc.querySelectorAll('img');
                     images.forEach((img: any) => img.style.objectFit = 'contain');
                     
-                    // 2. CRITICAL FIX FOR SPEECH BUBBLE SPACING
-                    // HTML2Canvas often adds extra space to contentEditable elements.
-                    // We convert them to static text blocks in the clone.
-                    const bubbles = clonedDoc.querySelectorAll('[data-bubble-text]');
-                    bubbles.forEach((b: any) => {
-                        const rawText = b.innerText; 
-                        
-                        // Disable editing artifacts
-                        b.removeAttribute('contenteditable');
-                        b.style.overflowWrap = 'anywhere';
-                        b.style.whiteSpace = 'pre-wrap';
-                        b.style.display = 'block';
-                        b.style.margin = '0';
-                        b.style.padding = '0';
-                        // Force line height again to be sure
-                        b.style.lineHeight = '1.2';
-                        
-                        // Remove trailing newlines which cause the "bottom gap"
-                        b.innerText = rawText.trim(); 
-                    });
+                    // 2. DIALOGUE FIX: Ensure Name and Text match exactly
+                    const processTextField = (selector: string) => {
+                        const elements = clonedDoc.querySelectorAll(selector);
+                        elements.forEach((el: any) => {
+                            const rawText = el.innerText;
+                            el.removeAttribute('contenteditable');
+                            el.style.overflowWrap = 'anywhere';
+                            el.style.whiteSpace = 'pre-wrap';
+                            el.style.display = 'block';
+                            el.style.margin = '0';
+                            el.innerText = rawText.trim(); 
+                        });
+                    }
+
+                    processTextField('[data-dialogue-text]');
+                    processTextField('[data-dialogue-name]');
                 }
             });
             
@@ -281,7 +282,7 @@ const App: React.FC = () => {
                     <ToolBtn icon={<ImageIcon size={22}/>} label="Fundo" color="purple" active={activeTab === 'bg'} onClick={() => setActiveTab(activeTab === 'bg' ? 'none' : 'bg')}/>
                     <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
                     
-                    <ToolBtn icon={<MessageCircleHeart size={22}/>} label="Fala" color="blue" onClick={() => handleAddItem('bubble')}/>
+                    <ToolBtn icon={<MessageCircleHeart size={22}/>} label="Fala" color="blue" onClick={() => handleAddItem('dialogue')}/>
                     
                     <ToolBtn icon={<Sticker size={22}/>} label="Decorar" color="yellow" active={activeTab === 'sticker'} onClick={() => setActiveTab(activeTab === 'sticker' ? 'none' : 'sticker')}/>
                     

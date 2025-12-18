@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SceneItem, AspectRatio } from '../types';
-import { Lock, Unlock, RefreshCw, RotateCcw, RotateCw, Trash2 } from 'lucide-react';
+import { Lock, Unlock, Trash2, Palette } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -14,6 +14,8 @@ interface StageProps {
   onUpdateItem: (id: string, updates: Partial<SceneItem>) => void;
   onRemoveItem: (id: string) => void;
 }
+
+const NAME_COLORS = ['#FF8FAB', '#6D597A', '#3B82F6', '#EF4444', '#10B981', '#F59E0B'];
 
 const Stage: React.FC<StageProps> = ({ 
   items, backgroundUrl, selectedId, isBgLocked, isSaving, aspectRatio,
@@ -180,7 +182,9 @@ const Stage: React.FC<StageProps> = ({
                         style={{
                             transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
                             cursor: item.locked ? 'default' : 'grab',
-                            zIndex: selectedId === item.id ? 9999 : 'auto' 
+                            zIndex: selectedId === item.id ? 9999 : 'auto',
+                            // Ensure Dialogue is usually wide
+                            width: item.type === 'dialogue' ? 'auto' : 'auto'
                         }}
                         onPointerDown={(e) => handlePointerDown(e, item.id)}
                         onTouchStart={(e) => handlePointerDown(e, item.id)}
@@ -197,94 +201,55 @@ const Stage: React.FC<StageProps> = ({
                                 <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2 leading-none">{item.emoji}</div>
                             )}
 
-                            {/* --- BUBBLE (PROFESSIONAL FIX) --- */}
-                            {item.type === 'bubble' && (
-                                /* Container with SAFE PADDING ensures tail is never cut off by html2canvas clipping */
-                                <div className="relative p-12 -m-12 flex flex-col items-center justify-center">
-                                    
-                                    {/* The Actual Bubble Box */}
+                            {/* --- PROFESSIONAL GACHA DIALOGUE BOX --- */}
+                            {item.type === 'dialogue' && (
+                                <div 
+                                    className="relative flex flex-col items-start"
+                                    style={{ width: 'min(80vw, 400px)' }}
+                                >
+                                    {/* Name Plate - Floats on top border */}
                                     <div 
-                                        className={`
-                                            relative z-20 bg-white border-[4px] border-[#6D597A] shadow-sm
-                                            ${item.bubbleStyle === 'thought' ? 'rounded-[2rem] px-6 py-4' : 'rounded-3xl px-5 py-3'}
-                                            flex items-center justify-center
-                                        `}
-                                        style={{ 
-                                            maxWidth: 'min(70vw, 280px)', 
-                                            width: 'max-content',
-                                            minWidth: '60px'
-                                        }}
-                                        data-bubble-container 
+                                        className="relative z-20 ml-4 mb-[-14px] px-4 py-1 rounded-full border-2 border-white shadow-md flex items-center justify-center min-w-[80px]"
+                                        style={{ backgroundColor: item.nameColor || '#FF8FAB' }}
+                                    >
+                                        <div
+                                            data-dialogue-name
+                                            contentEditable={!item.locked && !isSaving}
+                                            suppressContentEditableWarning
+                                            onBlur={(e) => onUpdateItem(item.id, { dialogueName: e.currentTarget.innerText })}
+                                            onPointerDown={(e) => e.stopPropagation()}
+                                            className="font-bold text-white text-sm outline-none whitespace-nowrap"
+                                            style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.2)' }}
+                                        >
+                                            {item.dialogueName}
+                                        </div>
+                                    </div>
+
+                                    {/* Main Box */}
+                                    <div className="w-full bg-white/95 border-[3px] rounded-2xl shadow-lg relative z-10 p-4 pt-5 pb-3 min-h-[80px] flex flex-col justify-start"
+                                         style={{ borderColor: item.nameColor || '#FF8FAB' }}
+                                         data-dialogue-box
                                     >
                                         <div 
-                                            data-bubble-text 
+                                            data-dialogue-text 
                                             contentEditable={!item.locked && !isSaving}
                                             suppressContentEditableWarning
                                             onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
-                                            className="outline-none text-center font-bold text-[#6D597A]"
+                                            className="outline-none text-gray-700 font-medium text-lg leading-snug w-full"
                                             onPointerDown={(e) => e.stopPropagation()}
                                             style={{ 
-                                                // THE FIX: "anywhere" breaks even long strings.
                                                 overflowWrap: 'anywhere',
-                                                wordBreak: 'break-word',
                                                 whiteSpace: 'pre-wrap',
-                                                lineHeight: '1.2', // Consistent line height
-                                                fontSize: '16px',
-                                                width: '100%',
-                                                margin: 0,
-                                                padding: 0,
                                                 cursor: item.locked ? 'default' : 'text'
                                             }} 
                                         >
                                             {item.text}
                                         </div>
-                                    </div>
-                                    
-                                    {/* The Tail Wrapper - Rotates around the center of the bubble */}
-                                    <div 
-                                        className="absolute inset-0 z-10 pointer-events-none flex items-center justify-center" 
-                                        style={{ 
-                                            transform: `rotate(${item.tailAngle || 180}deg)`,
-                                            // The rotation origin is strictly the center of the whole padded container
-                                            transformOrigin: 'center center'
-                                        }}
-                                    >
-                                        {/* Push tail outwards. The value matches approx half bubble height + offset */}
-                                        <div className="translate-y-[calc(50%+4px)]" style={{ 
-                                            marginTop: item.bubbleStyle === 'thought' ? '20px' : '15px'
-                                        }}>
-                                            {item.bubbleStyle === 'speech' ? (
-                                                <div className="relative flex flex-col items-center">
-                                                     {/* 
-                                                        GACHA TAIL TRICK: 
-                                                        We use a simple SVG triangle. 
-                                                        We create a white rectangle to cover the border intersection.
-                                                        This is the most reliable way to render in html2canvas without artifacts.
-                                                     */}
-                                                     
-                                                     {/* 1. The Cover Patch (Hides the bubble border where tail meets) */}
-                                                     {/* Increased Z-Index to ensure it covers properly */}
-                                                     <div className="w-6 h-4 bg-white absolute -top-3 z-30" />
-                                                     
-                                                     {/* 2. The Tail SVG */}
-                                                     <svg width="30" height="25" viewBox="0 0 30 25" className="z-20 overflow-visible relative">
-                                                        <path 
-                                                            d="M0,0 L15,25 L30,0" 
-                                                            fill="white" 
-                                                            stroke="#6D597A" 
-                                                            strokeWidth="4" 
-                                                            strokeLinejoin="round"
-                                                        />
-                                                        {/* Inner white fill to ensure no border bleeds through on top */}
-                                                        <path d="M2,0 L15,22 L28,0 Z" fill="white" stroke="none" />
-                                                     </svg>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center gap-1.5 -mt-3 relative z-30">
-                                                    <div className="w-3.5 h-3.5 bg-white border-[3px] border-[#6D597A] rounded-full"/>
-                                                    <div className="w-2 h-2 bg-white border-[3px] border-[#6D597A] rounded-full"/>
-                                                </div>
-                                            )}
+                                        
+                                        {/* Next Arrow Decoration */}
+                                        <div className="absolute bottom-2 right-3 animate-bounce-slow">
+                                            <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px]" 
+                                                 style={{ borderTopColor: item.nameColor || '#FF8FAB' }}/>
                                         </div>
                                     </div>
                                 </div>
@@ -299,14 +264,17 @@ const Stage: React.FC<StageProps> = ({
                                         <button onPointerDown={(e) => {e.stopPropagation(); onRemoveItem(item.id)}} className="absolute -top-3 -right-3 bg-red-500 text-white p-1.5 rounded-full shadow-md border-2 border-white hover:scale-110"><Trash2 size={12}/></button>
                                     )}
 
-                                    {!item.locked && item.type === 'bubble' && (
-                                        <>
-                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech' })}} className="absolute -bottom-3 -right-3 bg-blue-400 text-white p-1.5 rounded-full shadow-md border-2 border-white hover:scale-110"><RefreshCw size={12}/></button>
-                                            <div className="absolute -bottom-14 left-1/2 -translate-x-1/2 bg-white/80 p-1 rounded-full flex gap-2 border border-pink-200 backdrop-blur-sm pointer-events-auto">
-                                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) - 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCcw size={14}/></button>
-                                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) + 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCw size={14}/></button>
-                                            </div>
-                                        </>
+                                    {!item.locked && item.type === 'dialogue' && (
+                                        <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 bg-white/90 p-1.5 rounded-full shadow-md border border-pink-100 flex gap-2 pointer-events-auto z-50">
+                                            {NAME_COLORS.map(color => (
+                                                <button 
+                                                    key={color}
+                                                    onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { nameColor: color })}}
+                                                    className={`w-5 h-5 rounded-full border border-gray-200 ${item.nameColor === color ? 'ring-2 ring-gray-400 scale-110' : ''}`}
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                        </div>
                                     )}
                                 </>
                             )}

@@ -20,14 +20,14 @@ const LayerPanel: React.FC<LayerPanelProps> = ({
   const getIcon = (type: string) => {
     switch (type) {
       case 'character': return <ImageIcon size={14} className="text-pink-500" />;
-      case 'bubble': return <MessageSquare size={14} className="text-blue-500" />;
+      case 'dialogue': return <MessageSquare size={14} className="text-blue-500" />;
       case 'sticker': return <Smile size={14} className="text-yellow-500" />;
       default: return <ImageIcon size={14} />;
     }
   };
 
   const getLabel = (item: SceneItem) => {
-    if (item.type === 'bubble') return `Fala: "${item.text?.substring(0, 10) || ''}..."`;
+    if (item.type === 'dialogue') return `Fala: "${item.text?.substring(0, 10) || ''}..."`;
     if (item.type === 'sticker') return `Sticker ${item.emoji}`;
     return 'Personagem';
   };
