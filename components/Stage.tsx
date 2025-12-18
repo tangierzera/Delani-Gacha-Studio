@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { SceneItem } from '../types';
-import { X, MessageCircle, RefreshCw, Move, RotateCw, Spline, Heart } from 'lucide-react';
+import { X, MessageCircle, RefreshCw, Spline, Heart } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -25,6 +25,14 @@ const Stage: React.FC<StageProps> = ({
   const [activeGesture, setActiveGesture] = useState<'none' | 'drag' | 'pinch'>('none');
   const [gestureStart, setGestureStart] = useState({ x: 0, y: 0, dist: 0 });
   const [initialItemState, setInitialItemState] = useState<{x: number, y: number, scale: number, rotation: number, angle: number} | null>(null);
+  
+  // Track if background failed to load (CORS error or 404)
+  const [bgHasError, setBgHasError] = useState(false);
+
+  // Reset error state when URL changes
+  useEffect(() => {
+    setBgHasError(false);
+  }, [backgroundUrl]);
 
   // Helper to get distance between two touches
   const getDistance = (touches: React.TouchList) => {
@@ -147,24 +155,27 @@ const Stage: React.FC<StageProps> = ({
       onPointerDown={() => onSelectItem(null)}
     >
       {/* 1. Background Layer - Using IMG tag for reliable CORS capture */}
-      {backgroundUrl ? (
+      {backgroundUrl && !bgHasError ? (
         <img 
             src={backgroundUrl} 
             crossOrigin="anonymous"
-            alt="Scene Background"
-            className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none"
+            alt="" // Empty alt to prevent ugly text if it breaks visually before onError catches it
+            className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none transition-opacity duration-300"
+            onError={() => setBgHasError(true)}
         />
       ) : (
         <div 
-            className="absolute inset-0 w-full h-full z-0 pointer-events-none"
+            className="absolute inset-0 w-full h-full z-0 pointer-events-none transition-all duration-500"
             style={{ background: 'radial-gradient(circle, #FFF1E6 10%, #FFC4D6 100%)' }}
         />
       )}
 
-      {!backgroundUrl && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-gacha-hot/50 pointer-events-none animate-pulse z-10">
+      {(!backgroundUrl || bgHasError) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gacha-hot/50 pointer-events-none z-10 animate-pulse">
            <Heart size={64} fill="currentColor" className="mb-4" />
-          <p className="text-2xl font-bold font-sans">Toque em "Fundo" ♡</p>
+          <p className="text-2xl font-bold font-sans">
+             {bgHasError ? "Imagem protegida :(" : 'Toque em "Fundo" ♡'}
+          </p>
         </div>
       )}
 

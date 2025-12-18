@@ -254,7 +254,16 @@ const App: React.FC = () => {
                                 }}
                                 className="relative aspect-video rounded-xl overflow-hidden border-4 border-white hover:border-gacha-hot shadow-sm hover:shadow-lg transition-all group"
                             >
-                                <img src={bg.url} alt={bg.source} className="w-full h-full object-cover" loading="lazy" />
+                                <img 
+                                  src={bg.url} 
+                                  alt={bg.source} 
+                                  className="w-full h-full object-cover" 
+                                  loading="lazy" 
+                                  onError={(e) => {
+                                    // Hide broken search results
+                                    e.currentTarget.parentElement!.style.display = 'none';
+                                  }}
+                                />
                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-gacha-hot/20 transition-colors flex items-center justify-center">
                                     <Heart className="text-white opacity-0 group-hover:opacity-100 transform scale-0 group-hover:scale-110 transition-all drop-shadow-md" fill="currentColor" />
                                 </div>

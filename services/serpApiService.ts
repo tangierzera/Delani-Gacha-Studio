@@ -33,8 +33,11 @@ export const searchPinterestBackgrounds = async (query: string): Promise<Backgro
     
     if (data.images_results) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return data.images_results.slice(0, 20).map((img: any) => ({
-        url: img.original,
+      // INCREASED LIMIT: Changed from 20 to 100
+      return data.images_results.slice(0, 100).map((img: any) => ({
+        // PROXY FIX: We wrap the original URL in wsrv.nl
+        // This solves the CORS blocking issue and makes images downloadable/savable
+        url: `https://wsrv.nl/?url=${encodeURIComponent(img.original)}&w=1000&output=jpg`, 
         source: img.title || 'Pinterest Result'
       }));
     }
