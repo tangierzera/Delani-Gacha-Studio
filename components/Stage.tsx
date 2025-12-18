@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { SceneItem } from '../types';
-import { X, MessageCircle, RefreshCw, Spline, Heart } from 'lucide-react';
+import { X, MessageCircle, RefreshCw, Spline, Heart, Move } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -21,20 +21,35 @@ const Stage: React.FC<StageProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // Interaction State
-  const [activeGesture, setActiveGesture] = useState<'none' | 'drag' | 'pinch'>('none');
-  const [gestureStart, setGestureStart] = useState({ x: 0, y: 0, dist: 0 });
-  const [initialItemState, setInitialItemState] = useState<{x: number, y: number, scale: number, rotation: number, angle: number} | null>(null);
-  
-  // Track if background failed to load (CORS error or 404)
+  // --- Background State ---
+  // Controls position and zoom of the background image
+  const [bgTransform, setBgTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [bgHasError, setBgHasError] = useState(false);
 
-  // Reset error state when URL changes
+  // --- Interaction State ---
+  // 'bg-drag' | 'bg-pinch' | 'item-drag' | 'item-pinch' | 'none'
+  const [activeMode, setActiveMode] = useState<string>('none');
+  
+  // Stores initial values when a gesture starts
+  const [gestureStart, setGestureStart] = useState({ 
+    x: 0, 
+    y: 0, 
+    dist: 0, 
+    angle: 0,
+    // Store initial state of the object being manipulated (item or bg)
+    initialX: 0,
+    initialY: 0,
+    initialScale: 1,
+    initialRotation: 0
+  });
+
+  // Reset background position when a new URL is loaded
   useEffect(() => {
     setBgHasError(false);
+    setBgTransform({ x: 0, y: 0, scale: 1 });
   }, [backgroundUrl]);
 
-  // Helper to get distance between two touches
+  // --- Math Helpers ---
   const getDistance = (touches: React.TouchList) => {
     return Math.hypot(
       touches[0].clientX - touches[1].clientX,
@@ -42,95 +57,143 @@ const Stage: React.FC<StageProps> = ({
     );
   };
 
-  // Helper to get angle between two touches
   const getAngle = (touches: React.TouchList) => {
     const dx = touches[1].clientX - touches[0].clientX;
     const dy = touches[1].clientY - touches[0].clientY;
     return Math.atan2(dy, dx) * (180 / Math.PI);
   };
 
-  const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, itemId: string) => {
-    e.stopPropagation();
-    onSelectItem(itemId);
+  // --- Input Handlers ---
 
-    const item = items.find(i => i.id === itemId);
-    if (!item) return;
+  const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, itemId: string | null) => {
+    // If it's a mouse event (not touch), strictly use primary button
+    if ('button' in e && (e as React.PointerEvent).button !== 0) return;
 
-    if ('touches' in e && e.touches.length === 2) {
-      // Pinch/Rotate Start
-      const dist = getDistance(e.touches);
-      const angle = getAngle(e.touches);
-      setActiveGesture('pinch');
-      setGestureStart({ x: 0, y: 0, dist });
-      setInitialItemState({ 
-        x: item.x, 
-        y: item.y, 
-        scale: item.scale, 
-        rotation: item.rotation,
-        angle: angle 
-      });
-    } else {
-      // Drag Start
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
+    const isTouch = 'touches' in e;
+    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
+    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
+    const touchCount = isTouch ? (e as React.TouchEvent).touches.length : 1;
+
+    // 1. Determine Target
+    if (itemId) {
+      e.stopPropagation(); // Stop bubbling to background
+      onSelectItem(itemId);
       
-      setActiveGesture('drag');
-      setGestureStart({ x: clientX, y: clientY, dist: 0 });
-      setInitialItemState({ 
-        x: item.x, 
-        y: item.y, 
-        scale: item.scale, 
-        rotation: item.rotation,
-        angle: 0 
-      });
+      const item = items.find(i => i.id === itemId);
+      if (!item) return;
+
+      if (touchCount === 2 && isTouch) {
+        // Item Pinch/Rotate
+        const dist = getDistance((e as React.TouchEvent).touches);
+        const angle = getAngle((e as React.TouchEvent).touches);
+        setActiveMode('item-pinch');
+        setGestureStart({
+          x: 0, y: 0, dist, angle,
+          initialX: item.x, initialY: item.y,
+          initialScale: item.scale, initialRotation: item.rotation
+        });
+      } else {
+        // Item Drag
+        setActiveMode('item-drag');
+        setGestureStart({
+          x: clientX, y: clientY, dist: 0, angle: 0,
+          initialX: item.x, initialY: item.y,
+          initialScale: item.scale, initialRotation: item.rotation
+        });
+      }
+    } else {
+      // 2. Background Interaction (Clicked on empty stage)
+      // Deselect item if clicking background
+      onSelectItem(null);
+
+      if (touchCount === 2 && isTouch) {
+        // Background Pinch (Zoom)
+        const dist = getDistance((e as React.TouchEvent).touches);
+        setActiveMode('bg-pinch');
+        setGestureStart({
+          x: 0, y: 0, dist, angle: 0,
+          initialX: bgTransform.x, initialY: bgTransform.y,
+          initialScale: bgTransform.scale, initialRotation: 0
+        });
+      } else {
+        // Background Drag (Pan)
+        setActiveMode('bg-drag');
+        setGestureStart({
+          x: clientX, y: clientY, dist: 0, angle: 0,
+          initialX: bgTransform.x, initialY: bgTransform.y,
+          initialScale: bgTransform.scale, initialRotation: 0
+        });
+      }
     }
   };
 
-  const handleStageTouchMove = (e: React.TouchEvent | React.PointerEvent) => {
-    if (activeGesture === 'none' || !selectedId || !initialItemState) return;
+  const handleStageMove = (e: React.TouchEvent | React.PointerEvent) => {
+    if (activeMode === 'none') return;
     
-    e.preventDefault();
+    // Prevent scrolling while editing
+    if(e.cancelable) e.preventDefault();
 
-    if (activeGesture === 'pinch' && 'touches' in e && e.touches.length === 2) {
-      const currentDist = getDistance(e.touches);
-      const currentAngle = getAngle(e.touches);
-      
-      const scaleFactor = currentDist / gestureStart.dist;
-      const newScale = Math.max(0.2, Math.min(5, initialItemState.scale * scaleFactor));
-      
-      const angleDiff = currentAngle - initialItemState.angle;
-      const newRotation = initialItemState.rotation + angleDiff;
+    const isTouch = 'touches' in e;
+    const touches = isTouch ? (e as React.TouchEvent).touches : null;
+    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
+    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
 
-      onUpdateItem(selectedId, { scale: newScale, rotation: newRotation });
-    } 
-    else if (activeGesture === 'drag') {
-      const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.PointerEvent).clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.PointerEvent).clientY;
+    // --- ITEM LOGIC ---
+    if (activeMode.startsWith('item') && selectedId) {
+       if (activeMode === 'item-pinch' && touches && touches.length === 2) {
+         const currentDist = getDistance(touches);
+         const currentAngle = getAngle(touches);
+         
+         const scaleFactor = currentDist / gestureStart.dist;
+         const newScale = Math.max(0.2, Math.min(8, gestureStart.initialScale * scaleFactor));
+         
+         const angleDiff = currentAngle - gestureStart.angle;
+         const newRotation = gestureStart.initialRotation + angleDiff;
 
-      const deltaX = clientX - gestureStart.x;
-      const deltaY = clientY - gestureStart.y;
-
-      onUpdateItem(selectedId, {
-        x: initialItemState.x + deltaX,
-        y: initialItemState.y + deltaY
-      });
+         onUpdateItem(selectedId, { scale: newScale, rotation: newRotation });
+       } else if (activeMode === 'item-drag') {
+         const deltaX = clientX - gestureStart.x;
+         const deltaY = clientY - gestureStart.y;
+         onUpdateItem(selectedId, {
+           x: gestureStart.initialX + deltaX,
+           y: gestureStart.initialY + deltaY
+         });
+       }
+    }
+    
+    // --- BACKGROUND LOGIC ---
+    else if (activeMode.startsWith('bg')) {
+        if (activeMode === 'bg-pinch' && touches && touches.length === 2) {
+            const currentDist = getDistance(touches);
+            const scaleFactor = currentDist / gestureStart.dist;
+            // Limit background zoom between 0.5x and 5x
+            const newScale = Math.max(0.5, Math.min(5, gestureStart.initialScale * scaleFactor));
+            setBgTransform(prev => ({ ...prev, scale: newScale }));
+        } else if (activeMode === 'bg-drag') {
+            const deltaX = clientX - gestureStart.x;
+            const deltaY = clientY - gestureStart.y;
+            setBgTransform(prev => ({
+                ...prev,
+                x: gestureStart.initialX + deltaX,
+                y: gestureStart.initialY + deltaY
+            }));
+        }
     }
   };
 
   const handlePointerUp = () => {
-    setActiveGesture('none');
-    setInitialItemState(null);
+    setActiveMode('none');
   };
 
   // Helper to rotate bubble tail
   const rotateTail = (itemId: string, currentAngle: number = 0) => {
-      // Rotate by 45 degrees increments
       onUpdateItem(itemId, { tailAngle: (currentAngle + 45) % 360 });
   };
 
+  // Global event listeners for smooth dragging outside element bounds
   useEffect(() => {
-    if (activeGesture !== 'none') {
-      const handleMove = (e: Event) => handleStageTouchMove(e as unknown as React.PointerEvent);
+    if (activeMode !== 'none') {
+      const handleMove = (e: Event) => handleStageMove(e as unknown as React.PointerEvent);
       const handleUp = () => handlePointerUp();
 
       window.addEventListener('pointermove', handleMove);
@@ -145,32 +208,50 @@ const Stage: React.FC<StageProps> = ({
         window.removeEventListener('touchend', handleUp);
       };
     }
-  }, [activeGesture, selectedId, initialItemState]);
+  }, [activeMode, selectedId, bgTransform]);
 
   return (
     <div 
       id="stage-container"
       ref={containerRef}
-      className="w-full h-full relative overflow-hidden bg-gacha-cream shadow-inner touch-none"
-      onPointerDown={() => onSelectItem(null)}
+      className="w-full h-full relative overflow-hidden bg-gacha-cream shadow-inner touch-none select-none"
+      onPointerDown={(e) => handlePointerDown(e, null)}
+      onTouchStart={(e) => handlePointerDown(e, null)}
     >
-      {/* 1. Background Layer - Using IMG tag for reliable CORS capture */}
-      {backgroundUrl && !bgHasError ? (
-        <img 
-            id="stage-background-img"
-            src={backgroundUrl} 
-            crossOrigin="anonymous"
-            alt="scene-background"
-            className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none transition-opacity duration-300"
-            onError={() => setBgHasError(true)}
-        />
-      ) : (
-        <div 
-            className="absolute inset-0 w-full h-full z-0 pointer-events-none transition-all duration-500"
-            style={{ background: 'radial-gradient(circle, #FFF1E6 10%, #FFC4D6 100%)' }}
-        />
-      )}
+      {/* 
+        1. BACKGROUND LAYER 
+        Now acts as a transformable object instead of object-fit: cover 
+      */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{
+            // Apply the user's pan and zoom
+            transform: `translate(${bgTransform.x}px, ${bgTransform.y}px) scale(${bgTransform.scale})`,
+            transformOrigin: 'center center',
+            transition: activeMode.startsWith('bg') ? 'none' : 'transform 0.1s ease-out'
+        }}
+      >
+          {backgroundUrl && !bgHasError ? (
+            <img 
+                id="stage-background-img"
+                src={backgroundUrl} 
+                crossOrigin="anonymous"
+                alt="scene-background"
+                className="min-w-full min-h-full object-cover pointer-events-none shadow-2xl"
+                // Initial size ensures it covers the screen, then user transforms it
+                style={{ maxWidth: 'none' }} 
+                onError={() => setBgHasError(true)}
+            />
+          ) : (
+             // Gradient Placeholder
+            <div 
+                className="w-[150vw] h-[150vh]"
+                style={{ background: 'radial-gradient(circle, #FFF1E6 10%, #FFC4D6 100%)' }}
+            />
+          )}
+      </div>
 
+      {/* Empty State / Error Message */}
       {(!backgroundUrl || bgHasError) && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-gacha-hot/50 pointer-events-none z-10 animate-pulse">
            <Heart size={64} fill="currentColor" className="mb-4" />
@@ -180,50 +261,55 @@ const Stage: React.FC<StageProps> = ({
         </div>
       )}
 
+      {/* Helper hint for background movement (visible briefly when nothing is selected) */}
+      {backgroundUrl && !selectedId && activeMode === 'none' && (
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center opacity-40 pointer-events-none">
+              <span className="bg-black/20 text-white px-2 py-1 rounded-full text-[10px] flex items-center gap-1">
+                 <Move size={10} /> Mova o fundo
+              </span>
+          </div>
+      )}
+
+      {/* 
+        2. ITEMS LAYER
+      */}
       {items.map(item => (
         <div
           key={item.id}
           className={`absolute select-none group touch-none ${selectedId === item.id ? 'z-50' : 'z-20'}`}
           style={{
             transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
-            // Force items to be above the background (z-0) and placeholder (z-10)
             zIndex: item.zIndex + 20, 
-            cursor: activeGesture === 'drag' ? 'grabbing' : 'grab'
+            cursor: 'grab'
           }}
           onPointerDown={(e) => handlePointerDown(e, item.id)}
           onTouchStart={(e) => handlePointerDown(e, item.id)}
         >
             {item.type === 'character' && item.src && (
-                <div className={`relative ${selectedId === item.id ? 'ring-4 ring-gacha-sky ring-dashed rounded-xl' : ''}`}>
+                <div className={`relative ${selectedId === item.id ? 'ring-2 ring-gacha-sky ring-dashed rounded-xl' : ''}`}>
                     <img src={item.src} alt="Character" className="pointer-events-none max-h-64 object-contain drop-shadow-xl" crossOrigin="anonymous" />
                     {selectedId === item.id && (
-                        <>
-                            <button 
-                                className="absolute -top-4 -right-4 bg-red-400 text-white p-2 rounded-full shadow-lg hover:bg-red-500 transition-colors border-2 border-white"
-                                onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
-                            >
-                                <X size={16} />
-                            </button>
-                        </>
+                        <button 
+                            className="absolute -top-4 -right-4 bg-red-400 text-white p-2 rounded-full shadow-lg hover:bg-red-500 transition-colors border-2 border-white pointer-events-auto"
+                            onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
+                        >
+                            <X size={16} />
+                        </button>
                     )}
                 </div>
             )}
 
             {item.type === 'bubble' && (
                 <div className="relative">
-                    {/* The Tail (Rotatable) - Rendered BEHIND the bubble container for better layering */}
+                    {/* Tail */}
                     <div 
                         className="absolute top-1/2 left-1/2 w-full h-full pointer-events-none z-0"
-                        style={{
-                            transform: `translate(-50%, -50%) rotate(${item.tailAngle || 90}deg)`
-                        }}
+                        style={{ transform: `translate(-50%, -50%) rotate(${item.tailAngle || 90}deg)` }}
                     >
                         <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2">
                              {item.bubbleStyle === 'speech' ? (
                                  <svg width="40" height="50" viewBox="0 0 40 50" className="drop-shadow-sm">
-                                     {/* Main triangle tail */}
                                      <path d="M 0 0 L 20 45 L 40 0 Z" fill="white" stroke="#6D597A" strokeWidth="3" />
-                                     {/* White patch to hide the top border so it blends with bubble */}
                                      <path d="M 2 0 L 38 0 L 20 20 Z" fill="white" stroke="none" />
                                  </svg>
                              ) : (
@@ -235,10 +321,10 @@ const Stage: React.FC<StageProps> = ({
                         </div>
                     </div>
 
-                    {/* Bubble Container */}
+                    {/* Bubble Content */}
                     <div 
                         className={`relative min-w-[150px] min-h-[80px] p-4 flex items-center justify-center text-center transition-all z-10
-                        ${selectedId === item.id ? 'ring-4 ring-gacha-sky ring-dashed' : ''}
+                        ${selectedId === item.id ? 'ring-2 ring-gacha-sky ring-dashed' : ''}
                         ${item.bubbleStyle === 'thought' 
                             ? 'bg-white rounded-[50%] border-4 border-gacha-text' 
                             : 'bg-white rounded-2xl border-4 border-gacha-text'} 
@@ -253,20 +339,18 @@ const Stage: React.FC<StageProps> = ({
                         />
                     </div>
 
-                     {/* Controls (Only when selected) */}
+                     {/* Controls */}
                      {selectedId === item.id && (
                         <>
-                            {/* Delete */}
                             <button 
-                                className="absolute -top-3 -right-3 z-50 bg-red-400 text-white p-2 rounded-full shadow-lg border-2 border-white hover:scale-110 transition-transform"
+                                className="absolute -top-3 -right-3 z-50 bg-red-400 text-white p-2 rounded-full shadow-lg border-2 border-white pointer-events-auto"
                                 onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
                             >
                                 <X size={14} />
                             </button>
                             
-                            {/* Change Style */}
                             <button 
-                                className="absolute -bottom-3 -right-3 z-50 bg-gacha-sky text-white p-2 rounded-full shadow-lg border-2 border-white hover:scale-110 transition-transform"
+                                className="absolute -bottom-3 -right-3 z-50 bg-gacha-sky text-white p-2 rounded-full shadow-lg border-2 border-white pointer-events-auto"
                                 onPointerDown={(e) => { 
                                     e.stopPropagation(); 
                                     onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech'});
@@ -275,9 +359,8 @@ const Stage: React.FC<StageProps> = ({
                                 {item.bubbleStyle === 'speech' ? <RefreshCw size={14} /> : <MessageCircle size={14} />}
                             </button>
 
-                             {/* Rotate Tail Control */}
                              <button 
-                                className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 z-50 bg-gacha-hot text-white p-2 px-3 rounded-full shadow-lg flex items-center gap-1 text-xs font-bold border-2 border-white hover:scale-105 transition-transform"
+                                className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 z-50 bg-gacha-hot text-white p-2 px-3 rounded-full shadow-lg flex items-center gap-1 text-xs font-bold border-2 border-white pointer-events-auto whitespace-nowrap"
                                 onPointerDown={(e) => { 
                                     e.stopPropagation(); 
                                     rotateTail(item.id, item.tailAngle);

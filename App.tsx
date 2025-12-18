@@ -84,59 +84,46 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // SAVE IMAGE LOGIC
-  const handleSaveScene = () => {
-    // 1. Temporarily hide UI elements and selection for the screenshot
-    const wasUiVisible = uiVisible;
-    setUiVisible(false); // Hide UI for clean shot
+  // SAVE IMAGE LOGIC (FIXED FOR HD QUALITY & NO DISTORTION)
+  const handleSaveScene = async () => {
+    // Deselect item to remove dashed lines/buttons before saving
     setSelectedId(null);
 
-    // 2. Wait a moment for React to render the clean state
+    // Small delay to allow React to remove the selection indicators
     setTimeout(async () => {
         const stageElement = document.getElementById('stage-container');
-        if (stageElement) {
-            try {
-                // Get exact dimensions of the visible stage to prevent squash/stretch
-                const width = stageElement.offsetWidth;
-                const height = stageElement.offsetHeight;
+        if (!stageElement) return;
 
-                const canvas = await html2canvas(stageElement, {
-                    useCORS: true, // Allow loading cross-origin images (like pinterest ones)
-                    scale: 2, // High quality
-                    backgroundColor: null,
-                    // FORCE DIMENSIONS to fix "squashed" background issue
-                    width: width,
-                    height: height,
-                    scrollX: 0,
-                    scrollY: 0,
-                    x: 0,
-                    y: 0,
-                    logging: false,
-                    onclone: (clonedDoc) => {
-                        // Extra safety: Find the background image in the clone and ensure it is cover
-                        const bgImg = clonedDoc.getElementById('stage-background-img');
-                        if (bgImg) {
-                            bgImg.style.width = '100%';
-                            bgImg.style.height = '100%';
-                            bgImg.style.objectFit = 'cover';
-                        }
-                    }
-                });
-                
-                // Create download link
-                const link = document.createElement('a');
-                link.download = `delani-gacha-${Date.now()}.png`;
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            } catch (err) {
-                console.error("Erro ao salvar:", err);
-                alert("Ops! Não consegui salvar a imagem. Tente novamente.");
-            } finally {
-                // Restore UI state
-                setUiVisible(wasUiVisible);
-            }
+        try {
+            // Get exact VISIBLE dimensions
+            const width = stageElement.clientWidth;
+            const height = stageElement.clientHeight;
+
+            const canvas = await html2canvas(stageElement, {
+                useCORS: true, 
+                allowTaint: true, 
+                // Set explicit dimensions to match screen exactly
+                width: width,
+                height: height,
+                scale: 3, // 3x Resolution for High Quality
+                backgroundColor: null,
+                logging: false,
+                scrollX: 0,
+                scrollY: 0,
+                x: 0,
+                y: 0
+            });
+            
+            // Create download link
+            const link = document.createElement('a');
+            link.download = `delani-gacha-${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+        } catch (err) {
+            console.error("Erro ao salvar:", err);
+            alert("Ops! Não consegui salvar a imagem. Tente novamente.");
         }
-    }, 300);
+    }, 100);
   };
 
   return (
