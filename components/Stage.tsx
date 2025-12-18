@@ -157,9 +157,10 @@ const Stage: React.FC<StageProps> = ({
       {/* 1. Background Layer - Using IMG tag for reliable CORS capture */}
       {backgroundUrl && !bgHasError ? (
         <img 
+            id="stage-background-img"
             src={backgroundUrl} 
             crossOrigin="anonymous"
-            alt="" // Empty alt to prevent ugly text if it breaks visually before onError catches it
+            alt="scene-background"
             className="absolute inset-0 w-full h-full object-cover z-0 select-none pointer-events-none transition-opacity duration-300"
             onError={() => setBgHasError(true)}
         />

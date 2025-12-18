@@ -96,11 +96,31 @@ const App: React.FC = () => {
         const stageElement = document.getElementById('stage-container');
         if (stageElement) {
             try {
+                // Get exact dimensions of the visible stage to prevent squash/stretch
+                const width = stageElement.offsetWidth;
+                const height = stageElement.offsetHeight;
+
                 const canvas = await html2canvas(stageElement, {
                     useCORS: true, // Allow loading cross-origin images (like pinterest ones)
                     scale: 2, // High quality
                     backgroundColor: null,
-                    logging: false
+                    // FORCE DIMENSIONS to fix "squashed" background issue
+                    width: width,
+                    height: height,
+                    scrollX: 0,
+                    scrollY: 0,
+                    x: 0,
+                    y: 0,
+                    logging: false,
+                    onclone: (clonedDoc) => {
+                        // Extra safety: Find the background image in the clone and ensure it is cover
+                        const bgImg = clonedDoc.getElementById('stage-background-img');
+                        if (bgImg) {
+                            bgImg.style.width = '100%';
+                            bgImg.style.height = '100%';
+                            bgImg.style.objectFit = 'cover';
+                        }
+                    }
                 });
                 
                 // Create download link
