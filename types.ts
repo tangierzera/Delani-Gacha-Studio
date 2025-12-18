@@ -1,5 +1,5 @@
 
-export type ItemType = 'character' | 'bubble';
+export type ItemType = 'character' | 'bubble' | 'sticker';
 export type AspectRatio = '9:16' | '16:9' | '1:1';
 
 export interface SceneItem {
@@ -11,12 +11,15 @@ export interface SceneItem {
   rotation: number;
   zIndex: number;
   locked?: boolean;
-  // Character specific
+  
+  // Character/Sticker specific
   src?: string; 
+  emoji?: string; // For native stickers
+  
   // Bubble specific
   text?: string;
   bubbleStyle?: 'speech' | 'thought';
-  tailAngle?: number; // Changed to number for 360 rotation
+  tailAngle?: number; 
 }
 
 export interface BackgroundImage {
@@ -28,14 +31,4 @@ export interface StoredScene {
   id: string;
   thumbnail: string; // Base64 image
   timestamp: number;
-}
-
-export interface DragState {
-  isDragging: boolean;
-  isPinching: boolean;
-  startX: number;
-  startY: number;
-  initialDist: number;
-  initialScale: number;
-  itemId: string | null;
 }

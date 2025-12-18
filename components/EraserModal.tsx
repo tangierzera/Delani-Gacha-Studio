@@ -28,27 +28,23 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
     img.crossOrigin = "anonymous";
     img.src = imageSrc;
     img.onload = () => {
-      // Logic to FIT image within 85% of screen width/height without cropping
-      const padding = 20;
-      const maxWidth = window.innerWidth - (padding * 2);
-      const maxHeight = window.innerHeight * 0.6; // Leave space for controls
+      // Logic to FIT image perfectly
+      const padding = 40;
+      const maxWidth = window.innerWidth - padding;
+      const maxHeight = window.innerHeight * 0.65;
       
       let width = img.width;
       let height = img.height;
       
       const scale = Math.min(maxWidth / width, maxHeight / height);
-      
-      // If image is smaller than screen, keep original, otherwise scale down
       const finalWidth = Math.floor(width * scale);
       const finalHeight = Math.floor(height * scale);
 
       canvas.width = finalWidth;
       canvas.height = finalHeight;
       
-      // Draw scaled image
       ctx.drawImage(img, 0, 0, finalWidth, finalHeight);
       saveState(); 
-      
       setTimeout(() => autoDetectBackground(ctx, finalWidth, finalHeight), 100);
     };
   }, [imageSrc]);
@@ -57,11 +53,9 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
     setHistory(prev => {
-        const newHistory = [...prev, ctx.getImageData(0, 0, canvas.width, canvas.height)];
-        if (newHistory.length > 15) return newHistory.slice(newHistory.length - 15);
+        const newHistory = [...prev, ctx!.getImageData(0, 0, canvas.width, canvas.height)];
+        if (newHistory.length > 10) return newHistory.slice(newHistory.length - 10);
         return newHistory;
     });
   };
@@ -71,37 +65,15 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
+    
     const newHistory = [...history];
     newHistory.pop();
     const prevState = newHistory[newHistory.length - 1];
-    ctx.putImageData(prevState, 0, 0);
+    ctx!.putImageData(prevState, 0, 0);
     setHistory(newHistory);
   };
 
-  const getCoordinates = (e: React.MouseEvent | React.TouchEvent) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      
-      let clientX, clientY;
-      if ('touches' in e) {
-          clientX = e.touches[0].clientX;
-          clientY = e.touches[0].clientY;
-      } else {
-          clientX = (e as React.MouseEvent).clientX;
-          clientY = (e as React.MouseEvent).clientY;
-      }
-      
-      return {
-          x: Math.round(clientX - rect.left),
-          y: Math.round(clientY - rect.top)
-      };
-  };
-
-  // --- Magic Wand / Flood Fill Logic ---
-  
+  // --- Magic Wand Logic (Simplified for brevity but functional) ---
   const autoDetectBackground = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
       performMagicWand(0, 0, true);
   };
@@ -120,45 +92,25 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
     if (startX < 0 || startX >= width || startY < 0 || startY >= height) return;
 
     const pixelPos = (Math.floor(startY) * width + Math.floor(startX)) * 4;
-    const startR = data[pixelPos];
-    const startG = data[pixelPos + 1];
-    const startB = data[pixelPos + 2];
-    const startA = data[pixelPos + 3];
+    const [startR, startG, startB, startA] = [data[pixelPos], data[pixelPos+1], data[pixelPos+2], data[pixelPos+3]];
 
     if (startA === 0 && !isAuto) return;
 
-    const isSimilar = (pos: number) => {
-        const r = data[pos];
-        const g = data[pos + 1];
-        const b = data[pos + 2];
-        const a = data[pos + 3];
-        
-        if (a === 0) return true;
-
-        const dist = Math.sqrt(
-            Math.pow(r - startR, 2) + 
-            Math.pow(g - startG, 2) + 
-            Math.pow(b - startB, 2)
-        );
-        return dist <= tolerance;
-    };
-
+    // Simple Flood Fill
     const queue = [[Math.floor(startX), Math.floor(startY)]];
     const seen = new Uint8Array(width * height);
-    let pixelsRemoved = 0;
     
     while (queue.length > 0) {
         const [cx, cy] = queue.pop()!;
         const idx = cy * width + cx;
-        
         if (seen[idx]) continue;
         
         const pos = idx * 4;
-        if (isSimilar(pos)) {
+        const r = data[pos], g = data[pos+1], b = data[pos+2], a = data[pos+3];
+
+        if (a !== 0 && Math.sqrt((r-startR)**2 + (g-startG)**2 + (b-startB)**2) <= tolerance) {
             data[pos + 3] = 0;
             seen[idx] = 1;
-            pixelsRemoved++;
-
             if (cx > 0) queue.push([cx - 1, cy]);
             if (cx < width - 1) queue.push([cx + 1, cy]);
             if (cy > 0) queue.push([cx, cy - 1]);
@@ -166,44 +118,12 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
         }
     }
     
-    if (pixelsRemoved > 0) {
-        ctx.putImageData(imageData, 0, 0);
-        saveState();
-    }
-  };
-
-  // --- Interaction Handlers ---
-
-  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-    const { x, y } = getCoordinates(e);
-    if (mode === 'magic') {
-       performMagicWand(x, y);
-    } else {
-       setIsDrawing(true);
-       erase(x, y);
-    }
-  };
-
-  const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (mode === 'manual' && isDrawing) {
-        const { x, y } = getCoordinates(e);
-        erase(x, y);
-    }
-  };
-
-  const handlePointerUp = () => {
-    if (mode === 'manual' && isDrawing) {
-        setIsDrawing(false);
-        saveState();
-    }
+    ctx.putImageData(imageData, 0, 0);
+    saveState();
   };
 
   const erase = (x: number, y: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
+    const ctx = canvasRef.current!.getContext('2d')!;
     ctx.globalCompositeOperation = 'destination-out';
     ctx.beginPath();
     ctx.arc(x, y, brushSize / 2, 0, Math.PI * 2);
@@ -211,110 +131,55 @@ const EraserModal: React.FC<EraserModalProps> = ({ imageSrc, onSave, onClose }) 
     ctx.globalCompositeOperation = 'source-over';
   };
 
-  const handleSave = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    onSave(canvas.toDataURL('image/png'));
-  };
-
-  const triggerAutoRemove = () => {
-     const canvas = canvasRef.current;
-     if(!canvas) return;
-     const ctx = canvas.getContext('2d');
-     if(!ctx) return;
-     autoDetectBackground(ctx, canvas.width, canvas.height);
+  const getPos = (e: any) => {
+     const rect = canvasRef.current!.getBoundingClientRect();
+     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+     return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-0 animate-fade-in touch-none">
-      <div className="w-full flex justify-between items-center text-white p-4 absolute top-0 bg-gradient-to-b from-black/80 to-transparent">
-         <div>
-            <h3 className="text-lg font-bold">Recorte</h3>
-         </div>
-         <button onClick={onClose} className="p-2 bg-white/10 rounded-full hover:bg-white/20">
-            <X size={20} />
-         </button>
+    <div className="fixed inset-0 z-50 bg-[#2D1B2E] flex flex-col animate-[fadeIn_0.2s]">
+      {/* Header */}
+      <div className="flex justify-between items-center p-4 text-white">
+         <h3 className="text-lg font-bold flex gap-2 items-center"><Eraser size={20}/> Recortar</h3>
+         <button onClick={onClose} className="p-2 bg-white/10 rounded-full hover:bg-white/20"><X size={20} /></button>
       </div>
 
-      <div className="relative w-full h-full flex items-center justify-center bg-[url('https://media.istockphoto.com/id/1136365444/vector/transparent-background-seamless-pattern.jpg?s=612x612&w=0&k=20&c=2d6k2q9Z8g1Z8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8=')]">
+      {/* Canvas Area */}
+      <div className="flex-1 relative flex items-center justify-center bg-[url('https://media.istockphoto.com/id/1136365444/vector/transparent-background-seamless-pattern.jpg?s=612x612&w=0&k=20&c=2d6k2q9Z8g1Z8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8qZ8=')] overflow-hidden">
         <canvas
           ref={canvasRef}
-          onMouseDown={handlePointerDown}
-          onMouseMove={handlePointerMove}
-          onMouseUp={handlePointerUp}
-          onMouseLeave={handlePointerUp}
-          onTouchStart={handlePointerDown}
-          onTouchMove={handlePointerMove}
-          onTouchEnd={handlePointerUp}
-          className={`touch-none max-w-full max-h-full ${mode === 'magic' ? 'cursor-crosshair' : 'cursor-cell'}`}
+          onMouseDown={(e) => { setIsDrawing(true); if(mode==='manual') erase(getPos(e).x, getPos(e).y); else performMagicWand(getPos(e).x, getPos(e).y); }}
+          onMouseMove={(e) => { if(mode==='manual' && isDrawing) erase(getPos(e).x, getPos(e).y); }}
+          onMouseUp={() => { setIsDrawing(false); if(mode==='manual') saveState(); }}
+          onTouchStart={(e) => { setIsDrawing(true); const {x,y} = getPos(e); if(mode==='manual') erase(x,y); else performMagicWand(x,y); }}
+          onTouchMove={(e) => { if(mode==='manual') erase(getPos(e).x, getPos(e).y); }}
+          onTouchEnd={() => { setIsDrawing(false); if(mode==='manual') saveState(); }}
+          className="touch-none shadow-2xl"
         />
       </div>
 
       {/* Toolbar */}
-      <div className="absolute bottom-0 w-full bg-gray-900/90 backdrop-blur-md rounded-t-2xl p-4 border-t border-gray-700">
-        
-        {/* Tool Selection */}
-        <div className="flex gap-2 mb-4 bg-gray-800 p-1 rounded-lg">
-            <button 
-                onClick={() => setMode('magic')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md transition-all ${mode === 'magic' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-            >
-                <Wand2 size={18} /> Mágica
-            </button>
-            <button 
-                onClick={() => setMode('manual')}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md transition-all ${mode === 'manual' ? 'bg-pink-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-            >
-                <Eraser size={18} /> Manual
-            </button>
+      <div className="bg-[#4A2B4C] p-6 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <div className="flex gap-2 mb-6">
+            <button onClick={() => setMode('magic')} className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'magic' ? 'bg-[#FF8FAB] text-white shadow-lg translate-y-[-2px]' : 'bg-[#2D1B2E] text-gray-400'}`}><Wand2 size={18} /> Mágica</button>
+            <button onClick={() => setMode('manual')} className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${mode === 'manual' ? 'bg-[#FF8FAB] text-white shadow-lg translate-y-[-2px]' : 'bg-[#2D1B2E] text-gray-400'}`}><Eraser size={18} /> Borracha</button>
         </div>
 
-        {/* Controls */}
-        <div className="mb-4">
-            {mode === 'magic' ? (
-                <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                        <span className="text-purple-300 text-xs w-16 font-bold">Força</span>
-                        <input
-                            type="range"
-                            min="1"
-                            max="100"
-                            value={tolerance}
-                            onChange={(e) => setTolerance(Number(e.target.value))}
-                            className="flex-1 accent-purple-500 h-2 rounded-lg cursor-pointer bg-gray-700"
-                        />
-                    </div>
-                    <button 
-                        onClick={triggerAutoRemove}
-                        className="w-full py-2 bg-purple-500/30 border border-purple-500/50 rounded-lg text-purple-200 text-xs hover:bg-purple-500/50 flex items-center justify-center gap-2"
-                    >
-                        <RefreshCcw size={12} /> Tentar Auto-Remover
-                    </button>
-                </div>
-            ) : (
-                <div className="flex items-center gap-3">
-                    <span className="text-pink-300 text-xs w-16 font-bold">Tamanho</span>
-                    <input
-                        type="range"
-                        min="5"
-                        max="100"
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))}
-                        className="flex-1 accent-pink-500 h-2 rounded-lg cursor-pointer bg-gray-700"
-                    />
-                </div>
-            )}
+        <div className="flex items-center gap-4 mb-6">
+            <span className="text-pink-200 font-bold text-xs uppercase w-12">{mode === 'magic' ? 'Força' : 'Tamanho'}</span>
+            <input 
+                type="range" min="1" max="100" 
+                value={mode === 'magic' ? tolerance : brushSize}
+                onChange={(e) => mode === 'magic' ? setTolerance(Number(e.target.value)) : setBrushSize(Number(e.target.value))}
+                className="flex-1 h-3 bg-[#2D1B2E] rounded-full appearance-none accent-[#FF8FAB]"
+            />
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-between items-center pt-2 border-t border-gray-700">
-            <button onClick={handleUndo} className="p-3 rounded-full bg-gray-800 text-white hover:bg-gray-700 transition-colors" title="Desfazer">
-                <Undo size={20} />
-            </button>
-
-            <button onClick={handleSave} className="px-8 py-3 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold hover:shadow-lg hover:scale-105 transition-all flex items-center gap-2">
-                <Check size={20} /> Concluir
-            </button>
+        <div className="flex justify-between items-center border-t border-white/10 pt-4">
+            <button onClick={handleUndo} className="p-3 rounded-full bg-white/10 text-white hover:bg-white/20"><Undo size={24} /></button>
+            <button onClick={() => {const c=canvasRef.current; onSave(c!.toDataURL())}} className="px-8 py-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white font-bold shadow-lg hover:scale-105 transition-transform flex items-center gap-2"><Check size={20} /> Pronto</button>
         </div>
       </div>
     </div>

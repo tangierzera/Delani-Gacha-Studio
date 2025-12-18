@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { SceneItem, AspectRatio } from '../types';
-import { X, MessageCircle, RefreshCw, Lock, Unlock, RotateCw, Trash2, RotateCcw } from 'lucide-react';
+import { X, MessageCircle, RefreshCw, Lock, Unlock, RotateCw, Trash2, RotateCcw, Copy } from 'lucide-react';
 
 interface StageProps {
   items: SceneItem[];
@@ -16,54 +16,35 @@ interface StageProps {
 }
 
 const Stage: React.FC<StageProps> = ({ 
-  items, 
-  backgroundUrl, 
-  selectedId, 
-  isBgLocked,
-  isSaving,
-  aspectRatio,
-  onToggleBgLock,
-  onSelectItem, 
-  onUpdateItem,
-  onRemoveItem
+  items, backgroundUrl, selectedId, isBgLocked, isSaving, aspectRatio,
+  onToggleBgLock, onSelectItem, onUpdateItem, onRemoveItem
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // --- Background State ---
   const [bgTransform, setBgTransform] = useState({ x: 0, y: 0, scale: 1 });
-  const [bgHasError, setBgHasError] = useState(false);
 
-  // --- Interaction State ---
-  const [activeMode, setActiveMode] = useState<string>('none');
-  
-  const [gestureStart, setGestureStart] = useState({ 
-    x: 0, y: 0, dist: 0, angle: 0,
-    initialX: 0, initialY: 0,
-    initialScale: 1, initialRotation: 0
+  // --- Gestures State ---
+  const [activeMode, setActiveMode] = useState<'none' | 'item-drag' | 'item-pinch' | 'bg-drag' | 'bg-pinch'>('none');
+  const [gesture, setGesture] = useState({ 
+    startX: 0, startY: 0, startDist: 0, startAngle: 0,
+    initialX: 0, initialY: 0, initialScale: 1, initialRotation: 0 
   });
 
-  // Reset background transform when url changes or component mounts
+  // Reset bg on change
   useEffect(() => {
-    setBgHasError(false);
-    if (!backgroundUrl) {
-        setBgTransform({ x: 0, y: 0, scale: 1 });
-    }
+    if (!backgroundUrl) setBgTransform({ x: 0, y: 0, scale: 1 });
   }, [backgroundUrl, aspectRatio]);
 
-  // --- Helpers ---
-  const getDistance = (touches: React.TouchList) => {
-    return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
-  };
+  // --- Math Helpers ---
+  const getDist = (touches: React.TouchList) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+  const getAng = (touches: React.TouchList) => Math.atan2(touches[1].clientY - touches[0].clientY, touches[1].clientX - touches[0].clientX) * (180 / Math.PI);
 
-  const getAngle = (touches: React.TouchList) => {
-    const dx = touches[1].clientX - touches[0].clientX;
-    const dy = touches[1].clientY - touches[0].clientY;
-    return Math.atan2(dy, dx) * (180 / Math.PI);
-  };
-
-  // --- Interaction Logic ---
+  // --- Handlers ---
   const handlePointerDown = (e: React.PointerEvent | React.TouchEvent, itemId: string | null) => {
+    // Only left click
     if ('button' in e && (e as React.PointerEvent).button !== 0) return;
+    
+    // Prevent default browser zooming
+    // e.preventDefault(); // CAUTION: This might block scrolling if not careful, but needed for canvas
 
     const isTouch = 'touches' in e;
     const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
@@ -71,228 +52,145 @@ const Stage: React.FC<StageProps> = ({
     const touchCount = isTouch ? (e as React.TouchEvent).touches.length : 1;
 
     if (itemId) {
-      e.stopPropagation();
-      onSelectItem(itemId);
-      const item = items.find(i => i.id === itemId);
-      if (!item || item.locked) return;
+        e.stopPropagation();
+        onSelectItem(itemId);
+        
+        // Bring to front logic (simple Z-index bump could be added here if we re-sorted array)
+        
+        const item = items.find(i => i.id === itemId);
+        if (!item || item.locked) return;
 
-      if (touchCount === 2 && isTouch) {
-        const dist = getDistance((e as React.TouchEvent).touches);
-        const angle = getAngle((e as React.TouchEvent).touches);
-        setActiveMode('item-pinch');
-        setGestureStart({
-          x: 0, y: 0, dist, angle,
-          initialX: item.x, initialY: item.y,
-          initialScale: item.scale, initialRotation: item.rotation
-        });
-      } else {
-        setActiveMode('item-drag');
-        setGestureStart({
-          x: clientX, y: clientY, dist: 0, angle: 0,
-          initialX: item.x, initialY: item.y,
-          initialScale: item.scale, initialRotation: item.rotation
-        });
-      }
+        if (touchCount === 2 && isTouch) {
+            const dist = getDist((e as React.TouchEvent).touches);
+            const ang = getAng((e as React.TouchEvent).touches);
+            setActiveMode('item-pinch');
+            setGesture({
+                startX: 0, startY: 0, startDist: dist, startAngle: ang,
+                initialX: item.x, initialY: item.y, initialScale: item.scale, initialRotation: item.rotation
+            });
+        } else {
+            setActiveMode('item-drag');
+            setGesture({
+                startX: clientX, startY: clientY, startDist: 0, startAngle: 0,
+                initialX: item.x, initialY: item.y, initialScale: item.scale, initialRotation: item.rotation
+            });
+        }
     } else {
-      onSelectItem(null);
-      if (isBgLocked) return;
-
-      if (touchCount === 2 && isTouch) {
-        const dist = getDistance((e as React.TouchEvent).touches);
-        setActiveMode('bg-pinch');
-        setGestureStart({
-            x: 0, y: 0, dist, angle: 0,
-            initialX: bgTransform.x, initialY: bgTransform.y,
-            initialScale: bgTransform.scale, initialRotation: 0
-        });
-      } else {
-        setActiveMode('bg-drag');
-        setGestureStart({
-          x: clientX, y: clientY, dist: 0, angle: 0,
-          initialX: bgTransform.x, initialY: bgTransform.y,
-          initialScale: bgTransform.scale, initialRotation: 0
-        });
-      }
+        // Background Logic
+        onSelectItem(null);
+        if (isBgLocked) return;
+        
+        if (touchCount === 2 && isTouch) {
+            const dist = getDist((e as React.TouchEvent).touches);
+            setActiveMode('bg-pinch');
+            setGesture({
+                startX: 0, startY: 0, startDist: dist, startAngle: 0,
+                initialX: bgTransform.x, initialY: bgTransform.y, initialScale: bgTransform.scale, initialRotation: 0
+            });
+        } else {
+            setActiveMode('bg-drag');
+            setGesture({
+                startX: clientX, startY: clientY, startDist: 0, startAngle: 0,
+                initialX: bgTransform.x, initialY: bgTransform.y, initialScale: bgTransform.scale, initialRotation: 0
+            });
+        }
     }
   };
 
-  const handleStageMove = (e: React.TouchEvent | React.PointerEvent) => {
+  const handlePointerMove = (e: any) => {
     if (activeMode === 'none') return;
-    if(e.cancelable) e.preventDefault();
+    e.preventDefault();
 
     const isTouch = 'touches' in e;
-    const touches = isTouch ? (e as React.TouchEvent).touches : null;
-    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
-    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
+    const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+    const clientY = isTouch ? e.touches[0].clientY : e.clientY;
 
     if (activeMode.startsWith('item') && selectedId) {
-       const item = items.find(i => i.id === selectedId);
-       if (!item || item.locked) return; 
-
-       if (activeMode === 'item-pinch' && touches && touches.length === 2) {
-         const currentDist = getDistance(touches);
-         const currentAngle = getAngle(touches);
-         const scaleFactor = currentDist / gestureStart.dist;
-         const newScale = Math.max(0.2, Math.min(8, gestureStart.initialScale * scaleFactor));
-         const angleDiff = currentAngle - gestureStart.angle;
-         const newRotation = gestureStart.initialRotation + angleDiff;
-         onUpdateItem(selectedId, { scale: newScale, rotation: newRotation });
-       } else if (activeMode === 'item-drag') {
-         const deltaX = clientX - gestureStart.x;
-         const deltaY = clientY - gestureStart.y;
-         onUpdateItem(selectedId, {
-           x: gestureStart.initialX + deltaX,
-           y: gestureStart.initialY + deltaY
-         });
-       }
+        if (activeMode === 'item-drag') {
+            const dx = clientX - gesture.startX;
+            const dy = clientY - gesture.startY;
+            onUpdateItem(selectedId, { x: gesture.initialX + dx, y: gesture.initialY + dy });
+        } else if (activeMode === 'item-pinch' && isTouch && e.touches.length === 2) {
+            const dist = getDist(e.touches);
+            const ang = getAng(e.touches);
+            const scale = Math.max(0.1, gesture.initialScale * (dist / gesture.startDist));
+            const rot = gesture.initialRotation + (ang - gesture.startAngle);
+            onUpdateItem(selectedId, { scale, rotation: rot });
+        }
     } else if (activeMode.startsWith('bg') && !isBgLocked) {
-        if (activeMode === 'bg-pinch' && touches && touches.length === 2) {
-            const currentDist = getDistance(touches);
-            const scaleFactor = currentDist / gestureStart.dist;
-            setBgTransform(prev => ({ ...prev, scale: Math.max(0.2, Math.min(5, gestureStart.initialScale * scaleFactor)) }));
-        } else if (activeMode === 'bg-drag') {
-            const deltaX = clientX - gestureStart.x;
-            const deltaY = clientY - gestureStart.y;
-            setBgTransform(prev => ({
-                ...prev,
-                x: gestureStart.initialX + deltaX,
-                y: gestureStart.initialY + deltaY
-            }));
+        if (activeMode === 'bg-drag') {
+            const dx = clientX - gesture.startX;
+            const dy = clientY - gesture.startY;
+            setBgTransform(p => ({ ...p, x: gesture.initialX + dx, y: gesture.initialY + dy }));
+        } else if (activeMode === 'bg-pinch' && isTouch && e.touches.length === 2) {
+            const dist = getDist(e.touches);
+            const scale = Math.max(0.2, gesture.initialScale * (dist / gesture.startDist));
+            setBgTransform(p => ({ ...p, scale }));
         }
     }
   };
 
   const handlePointerUp = () => setActiveMode('none');
 
-  const adjustTailAngle = (itemId: string, currentAngle: number | undefined, delta: number) => {
-      const angle = currentAngle || 90;
-      onUpdateItem(itemId, { tailAngle: (angle + delta) % 360 });
-  };
-
+  // --- Global Event Listeners for smooth drag outside div ---
   useEffect(() => {
     if (activeMode !== 'none') {
-      const handleMove = (e: Event) => handleStageMove(e as unknown as React.PointerEvent);
-      const handleUp = () => handlePointerUp();
-      window.addEventListener('pointermove', handleMove);
-      window.addEventListener('pointerup', handleUp);
-      window.addEventListener('touchmove', handleMove, { passive: false });
-      window.addEventListener('touchend', handleUp);
-      return () => {
-        window.removeEventListener('pointermove', handleMove);
-        window.removeEventListener('pointerup', handleUp);
-        window.removeEventListener('touchmove', handleMove);
-        window.removeEventListener('touchend', handleUp);
-      };
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('touchmove', handlePointerMove);
+            window.removeEventListener('touchend', handlePointerUp);
+        };
     }
-  }, [activeMode, selectedId, bgTransform, items, isBgLocked]);
+  }, [activeMode, selectedId]);
 
-  const getContainerClass = () => {
-    switch(aspectRatio) {
-      case '9:16':
-        return 'aspect-[9/16] h-[85vh] w-auto max-w-full'; 
-      case '16:9':
-        return 'aspect-[16/9] w-[95vw] h-auto max-h-[85vh]';
-      case '1:1':
-        return 'aspect-[1/1] h-[80vh] w-auto max-w-full';
-      default:
-        return 'w-full h-full';
-    }
-  };
+  // --- Styling ---
+  const getRatioClass = () => {
+    if (aspectRatio === '9:16') return 'aspect-[9/16] h-[85vh]';
+    if (aspectRatio === '16:9') return 'aspect-[16/9] w-full max-w-4xl';
+    return 'aspect-square h-[70vh]';
+  }
 
-  // --- SEPARATE LAYERS ---
-  const characters = items.filter(i => i.type === 'character');
-  const bubbles = items.filter(i => i.type === 'bubble');
-
+  // --- Render ---
   return (
-    <div 
-      ref={containerRef}
-      className="w-full h-full flex items-center justify-center p-4 bg-transparent"
-      onPointerDown={() => onSelectItem(null)}
-    >
-      <div 
-        className={`relative shadow-[0_20px_60px_-10px_rgba(255,182,193,0.5)] border-4 border-white bg-white rounded-lg overflow-hidden ${getContainerClass()}`}
-      >
-          <div 
+    <div className="w-full h-full flex items-center justify-center p-4" onPointerDown={() => onSelectItem(null)}>
+        <div 
             id="canvas-area"
-            className="w-full h-full relative touch-none bg-transparent"
+            className={`relative bg-white shadow-2xl rounded-lg overflow-hidden border-4 border-white transition-all duration-300 ${getRatioClass()}`}
             onPointerDown={(e) => handlePointerDown(e, null)}
             onTouchStart={(e) => handlePointerDown(e, null)}
-          >
-              {/* === LAYER 1: BACKGROUND === */}
-              <div 
-                className="absolute inset-0 w-full h-full flex items-center justify-center pointer-events-none z-0"
-                style={{
-                    transform: `translate(${bgTransform.x}px, ${bgTransform.y}px) scale(${bgTransform.scale})`,
-                    transition: activeMode.startsWith('bg') ? 'none' : 'transform 0.1s ease-out'
-                }}
-              >
-                  {backgroundUrl && !bgHasError ? (
-                    <img 
-                        src={backgroundUrl} 
-                        crossOrigin="anonymous"
-                        alt="scene-background"
-                        className="w-full h-full object-cover pointer-events-none select-none"
-                        onError={() => setBgHasError(true)}
-                        draggable={false}
-                    />
-                  ) : (
-                     <div className="w-full h-full opacity-10 bg-[radial-gradient(circle,_#ffc4d6_2px,_transparent_2px)] [background-size:20px_20px]" /> 
-                  )}
-              </div>
+        >
+            {/* 1. BACKGROUND LAYER */}
+            <div 
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                style={{ transform: `translate(${bgTransform.x}px, ${bgTransform.y}px) scale(${bgTransform.scale})` }}
+            >
+                {backgroundUrl ? (
+                    <img src={backgroundUrl} className="w-full h-full object-cover" crossOrigin="anonymous" />
+                ) : (
+                    <div className="w-full h-full bg-[radial-gradient(#FFC4D6_2px,transparent_2px)] [background-size:24px_24px] opacity-30" />
+                )}
+            </div>
 
-              {/* LOCK BUTTON */}
-              {backgroundUrl && !isSaving && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onToggleBgLock(); }}
-                    className={`absolute bottom-4 left-4 z-40 p-2 rounded-full shadow-lg border-2 border-white transition-all pointer-events-auto ${isBgLocked ? 'bg-pink-400 text-white opacity-60 hover:opacity-100' : 'bg-white text-pink-500 animate-bounce'}`}
-                  >
-                     {isBgLocked ? <Lock size={20} /> : <Unlock size={20} />}
-                  </button>
-              )}
-
-              {/* === LAYER 2: CHARACTERS === */}
-              {characters.map(item => (
-                <div
-                  key={item.id}
-                  className={`absolute select-none group touch-none ${selectedId === item.id ? 'z-20' : 'z-10'}`}
-                  style={{
-                    transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
-                    cursor: item.locked ? 'default' : 'grab'
-                  }}
-                  onPointerDown={(e) => handlePointerDown(e, item.id)}
-                  onTouchStart={(e) => handlePointerDown(e, item.id)}
+            {/* Lock Indicator */}
+            {backgroundUrl && !isSaving && (
+                <button 
+                    onClick={(e) => {e.stopPropagation(); onToggleBgLock()}} 
+                    className={`absolute bottom-4 left-4 z-10 pointer-events-auto p-2 rounded-full shadow-lg border-2 border-white transition-colors ${isBgLocked ? 'bg-pink-100 text-pink-400' : 'bg-white text-green-500'}`}
                 >
-                    <div className={`relative ${selectedId === item.id && !isSaving ? 'ring-2 ring-pink-400 ring-dashed rounded-xl' : ''}`}>
-                        <img 
-                            src={item.src} 
-                            alt="Character" 
-                            className="pointer-events-none max-h-64 w-auto h-auto object-contain drop-shadow-xl select-none" 
-                            crossOrigin="anonymous" 
-                            draggable={false} 
-                            style={{ maxWidth: 'none' }} 
-                        />
-                        
-                        {item.locked && !isSaving && (
-                                <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full"><Lock size={12} /></div>
-                        )}
+                    {isBgLocked ? <Lock size={16}/> : <Unlock size={16}/>}
+                </button>
+            )}
 
-                        {selectedId === item.id && !item.locked && !isSaving && (
-                            <button 
-                                className="absolute -top-3 -right-3 bg-red-400 text-white p-1.5 rounded-full shadow-lg border-2 border-white pointer-events-auto"
-                                onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
-                    </div>
-                </div>
-              ))}
-
-              {/* === LAYER 3: BUBBLES (Fixed Spacing Logic) === */}
-              {bubbles.map(item => (
+            {/* 2. ITEMS LAYER */}
+            {items.map(item => (
                 <div
                     key={item.id}
-                    className={`absolute select-none group touch-none ${selectedId === item.id ? 'z-50' : 'z-40'}`}
+                    className={`absolute select-none group touch-none ${selectedId === item.id ? 'z-50' : 'z-20'}`}
                     style={{
                         transform: `translate(${item.x}px, ${item.y}px) scale(${item.scale}) rotate(${item.rotation}deg)`,
                         cursor: item.locked ? 'default' : 'grab'
@@ -300,126 +198,96 @@ const Stage: React.FC<StageProps> = ({
                     onPointerDown={(e) => handlePointerDown(e, item.id)}
                     onTouchStart={(e) => handlePointerDown(e, item.id)}
                 >
-                    {/* The Bubble Wrapper - Uses inline-flex to hug content */}
-                    <div className="relative flex items-center justify-center">
+                    <div className={`relative ${selectedId === item.id && !isSaving ? 'ring-2 ring-pink-400 ring-dashed rounded-lg' : ''}`}>
+                        
+                        {/* --- CONTENT RENDERER --- */}
+                        
+                        {/* A. CHARACTERS */}
+                        {item.type === 'character' && (
+                            <img 
+                                src={item.src} 
+                                className="max-h-64 w-auto h-auto object-contain pointer-events-none drop-shadow-md" 
+                                crossOrigin="anonymous"
+                                draggable={false}
+                            />
+                        )}
 
-                        {/* --- THE BUBBLE BODY --- */}
-                        <div 
-                            // Add data-bubble-container to target in html2canvas
-                            data-bubble-container 
-                            className={`relative min-w-[100px] max-w-[300px] z-20 flex items-center justify-center
-                            ${item.bubbleStyle === 'thought' 
-                                ? 'bg-white rounded-full border-[3px] border-[#6D597A] px-6 py-4 shadow-lg' 
-                                : 'bg-white rounded-2xl border-[3px] border-[#6D597A] px-5 py-3 shadow-lg'}
-                            ${selectedId === item.id && !isSaving ? 'ring-4 ring-pink-300 ring-opacity-50' : ''}
-                            `}
-                        >
-                             <div 
-                                data-bubble-text
-                                contentEditable={!item.locked && !isSaving}
-                                suppressContentEditableWarning={true}
-                                onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
-                                className="bg-transparent border-none outline-none text-center text-[#6D597A] font-sans font-bold text-lg pointer-events-auto"
-                                data-placeholder="Digite..."
-                                style={{ 
-                                    cursor: item.locked ? 'default' : 'text',
-                                    wordBreak: 'break-word', 
-                                    whiteSpace: 'pre-wrap',
-                                    lineHeight: '1.2', 
-                                    minWidth: '50px',
-                                    display: 'inline-block', // Crucial: Behaves like text, not block
-                                    margin: 0,
-                                    padding: 0
-                                }}
-                                onPointerDown={(e) => e.stopPropagation()}
-                            >
-                                {item.text}
+                        {/* B. STICKERS */}
+                        {item.type === 'sticker' && (
+                            <div className="text-6xl drop-shadow-md cursor-default pointer-events-none pb-2">
+                                {item.emoji}
                             </div>
-                        </div>
+                        )}
 
-                         {/* --- THE TAIL (Rotatable) --- */}
-                         <div 
-                            className="absolute inset-0 pointer-events-none flex items-center justify-center z-10"
-                            style={{
-                                transform: `rotate(${item.tailAngle || 45}deg)`
-                            }}
-                        >
-                            <div className="absolute transform translate-y-[35px]"> 
-                                {item.bubbleStyle === 'speech' ? (
-                                    <svg width="40" height="40" viewBox="0 0 32 32" className="drop-shadow-sm">
-                                        <path 
-                                            d="M10,0 Q16,20 30,30 Q10,25 0,0 Z" 
-                                            fill="white" 
-                                            stroke="#6D597A" 
-                                            strokeWidth="3" 
-                                        />
-                                        <rect x="0" y="-5" width="20" height="10" fill="white" />
-                                    </svg>
-                                ) : (
-                                    <div className="flex flex-col items-center gap-1.5 mt-2">
-                                        <div className="w-5 h-5 bg-white border-[3px] border-[#6D597A] rounded-full"></div>
-                                        <div className="w-3 h-3 bg-white border-[3px] border-[#6D597A] rounded-full"></div>
+                        {/* C. BUBBLES (Fixed Spacing Tech) */}
+                        {item.type === 'bubble' && (
+                            <div className="relative flex items-center justify-center">
+                                {/* Bubble Container */}
+                                <div 
+                                    className={`
+                                        relative z-20 bg-white border-[3px] border-[#6D597A] shadow-md
+                                        ${item.bubbleStyle === 'thought' ? 'rounded-full px-6 py-4' : 'rounded-2xl px-4 py-2'}
+                                    `}
+                                    // 'inline-table' is the magic CSS property here. 
+                                    // Unlike 'block' or 'flex', it collapses perfectly around text content 
+                                    // and renders consistently in html2canvas without bottom whitespace.
+                                    style={{ display: 'inline-table', width: 'auto' }}
+                                >
+                                    <div 
+                                        data-bubble-text 
+                                        contentEditable={!item.locked && !isSaving}
+                                        suppressContentEditableWarning
+                                        onBlur={(e) => onUpdateItem(item.id, { text: e.currentTarget.innerText })}
+                                        className="outline-none text-center font-bold text-[#6D597A] min-w-[50px] whitespace-pre-wrap break-words leading-[1.2]"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                        style={{ display: 'block' }} 
+                                    >
+                                        {item.text}
                                     </div>
-                                )}
+                                </div>
+                                
+                                {/* Tail SVG */}
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10" style={{ transform: `rotate(${item.tailAngle || 45}deg)` }}>
+                                    <div className="translate-y-[28px]">
+                                        {item.bubbleStyle === 'speech' ? (
+                                            <svg width="30" height="30" viewBox="0 0 32 32" className="drop-shadow-sm">
+                                                <path d="M10,0 Q16,20 30,30 Q10,25 0,0 Z" fill="white" stroke="#6D597A" strokeWidth="3" />
+                                                <rect x="0" y="-5" width="20" height="10" fill="white" />
+                                            </svg>
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-1 mt-1">
+                                                <div className="w-4 h-4 bg-white border-2 border-[#6D597A] rounded-full"/>
+                                                <div className="w-2 h-2 bg-white border-2 border-[#6D597A] rounded-full"/>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* --- CONTROLS --- */}
                         {selectedId === item.id && !isSaving && (
                             <>
-                                <button 
-                                    className="absolute -top-5 -left-3 z-50 bg-yellow-300 text-white p-2 rounded-full shadow-md border-2 border-white pointer-events-auto hover:scale-110 transition-transform"
-                                    onPointerDown={(e) => { 
-                                        e.stopPropagation(); 
-                                        onUpdateItem(item.id, { locked: !item.locked });
-                                    }}
-                                >
-                                    {item.locked ? <Lock size={14} /> : <Unlock size={14} />}
-                                </button>
-
-                                {!item.locked && (
+                                <button onPointerDown={(e) => {e.stopPropagation(); onRemoveItem(item.id)}} className="absolute -top-4 -right-4 bg-red-500 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110 transition-transform"><Trash2 size={14}/></button>
+                                <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { locked: !item.locked })}} className="absolute -top-4 -left-4 bg-yellow-400 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110 transition-transform">{item.locked ? <Lock size={14}/> : <Unlock size={14}/>}</button>
+                                
+                                {item.type === 'bubble' && (
                                     <>
-                                        <button 
-                                            className="absolute -top-5 -right-3 z-50 bg-red-400 text-white p-2 rounded-full shadow-md border-2 border-white pointer-events-auto hover:scale-110 transition-transform"
-                                            onPointerDown={(e) => { e.stopPropagation(); onRemoveItem(item.id); }}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                        
-                                        <button 
-                                            className="absolute -bottom-5 -right-3 z-50 bg-blue-300 text-white p-2 rounded-full shadow-md border-2 border-white pointer-events-auto hover:scale-110 transition-transform"
-                                            onPointerDown={(e) => { 
-                                                e.stopPropagation(); 
-                                                onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech'});
-                                            }}
-                                        >
-                                            {item.bubbleStyle === 'speech' ? <RefreshCw size={14} /> : <MessageCircle size={14} />}
-                                        </button>
-
-                                        {/* TAIL ROTATION */}
-                                        <div className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 flex gap-3 z-50 pointer-events-auto bg-white/80 p-1 rounded-full border border-pink-200 shadow-sm backdrop-blur-sm">
-                                            <button 
-                                                className="bg-pink-400 text-white p-2 rounded-full shadow-sm hover:bg-pink-500 active:scale-95"
-                                                onPointerDown={(e) => { e.stopPropagation(); adjustTailAngle(item.id, item.tailAngle, -20); }}
-                                            >
-                                                <RotateCcw size={14} />
-                                            </button>
-                                            <button 
-                                                className="bg-pink-400 text-white p-2 rounded-full shadow-sm hover:bg-pink-500 active:scale-95"
-                                                onPointerDown={(e) => { e.stopPropagation(); adjustTailAngle(item.id, item.tailAngle, 20); }}
-                                            >
-                                                <RotateCw size={14} />
-                                            </button>
+                                        <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { bubbleStyle: item.bubbleStyle === 'speech' ? 'thought' : 'speech' })}} className="absolute -bottom-4 -right-4 bg-blue-400 text-white p-2 rounded-full shadow-md border-2 border-white hover:scale-110"><RefreshCw size={14}/></button>
+                                        <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 bg-white/80 p-1 rounded-full flex gap-2 border border-pink-200">
+                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) - 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCcw size={14}/></button>
+                                            <button onPointerDown={(e) => {e.stopPropagation(); onUpdateItem(item.id, { tailAngle: (item.tailAngle || 0) + 15 })}} className="bg-pink-400 text-white p-1 rounded-full"><RotateCw size={14}/></button>
                                         </div>
                                     </>
                                 )}
                             </>
                         )}
+
                     </div>
                 </div>
             ))}
-          </div>
-      </div>
+
+        </div>
     </div>
   );
 };

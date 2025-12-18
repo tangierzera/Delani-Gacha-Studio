@@ -1,56 +1,54 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { SceneItem, BackgroundImage, AspectRatio, StoredScene } from './types';
 import Stage from './components/Stage';
 import EraserModal from './components/EraserModal';
 import { searchPinterestBackgrounds } from './services/serpApiService';
-import { ImagePlus, MessageSquarePlus, Image as ImageIcon, Download, Camera, Trash2, X, Heart, Sparkles, Eye, EyeOff, Smartphone, Monitor, Square, Film, History, FilePlus2, Upload } from 'lucide-react';
+import { 
+  ImagePlus, MessageCircleHeart, Image as ImageIcon, Download, 
+  Camera, Trash2, X, Heart, Sparkles, Eye, EyeOff, 
+  Smartphone, Monitor, Square, RefreshCcw, Sticker, Upload
+} from 'lucide-react';
 import html2canvas from 'html2canvas';
+
+// --- STICKER PACK (New Feature) ---
+const STICKERS = ["❤️", "✨", "💢", "💧", "🌸", "🎀", "⭐", "🎵", "💤", "🔥", "🦋", "🍄"];
 
 const App: React.FC = () => {
   // --- State ---
+  // resetKey is the "Nuclear Option". Changing it destroys the Stage and recreates it fresh.
+  const [resetKey, setResetKey] = useState(0);
+  
   const [items, setItems] = useState<SceneItem[]>([]);
   const [background, setBackground] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
-  // RESET LOGIC: We use a boolean to physically unmount the Stage component
-  const [isResetting, setIsResetting] = useState(false);
-
-  // Eraser / Char Upload
+  // Modals & Flows
   const [showEraser, setShowEraser] = useState(false);
   const [tempImageForEraser, setTempImageForEraser] = useState<string | null>(null);
   
-  // Background Search / Upload
   const [showBgSearch, setShowBgSearch] = useState(false);
   const [bgQuery, setBgQuery] = useState('');
   const [bgResults, setBgResults] = useState<BackgroundImage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
-  // Menu visibility
-  const [showBgOptions, setShowBgOptions] = useState(false);
-
-  // Storyboard State
+  // UI Panels
+  const [activeTab, setActiveTab] = useState<'none' | 'bg' | 'sticker'>('none');
+  const [showHistory, setShowHistory] = useState(false);
   const [scenes, setScenes] = useState<StoredScene[]>([]);
-  const [showScenesSidebar, setShowScenesSidebar] = useState(false);
   
-  // Aspect Ratio State
+  // Configs
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
-  
-  // LOCK BACKGROUND BY DEFAULT
   const [isBgLocked, setIsBgLocked] = useState(true);
-  
-  // Saving State
   const [isCapturing, setIsCapturing] = useState(false);
-  
-  // UI Visibility State
   const [uiVisible, setUiVisible] = useState(true);
   
   // Refs
   const charInputRef = useRef<HTMLInputElement>(null);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Handlers ---
+  // --- Core Logic ---
 
-  const handleAddItem = (type: 'character' | 'bubble', src?: string) => {
+  const handleAddItem = (type: 'character' | 'bubble' | 'sticker', payload?: string) => {
     const newItem: SceneItem = {
       id: Date.now().toString(),
       type,
@@ -59,54 +57,50 @@ const App: React.FC = () => {
       scale: 1,
       rotation: 0,
       zIndex: items.length + 1,
-      src: src,
-      text: type === 'bubble' ? 'Digite...' : undefined,
+      // Logic mapping based on type
+      src: type === 'character' ? payload : undefined,
+      text: type === 'bubble' ? 'Digite aqui...' : undefined,
+      emoji: type === 'sticker' ? payload : undefined,
       bubbleStyle: 'speech',
       locked: false,
       tailAngle: 45
     };
-    setItems([...items, newItem]);
+    setItems((prev) => [...prev, newItem]);
     setSelectedId(newItem.id);
+    setActiveTab('none'); // Close menus on add
   };
 
   const handleUpdateItem = (id: string, updates: Partial<SceneItem>) => {
-    setItems(items.map(item => item.id === id ? { ...item, ...updates } : item));
+    setItems(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
   };
 
   const handleRemoveItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+    setItems(prev => prev.filter(item => item.id !== id));
     if (selectedId === id) setSelectedId(null);
   };
 
-  // --- RESET NUCLEAR OPTION ---
+  // --- THE SENIOR RESET FIX ---
   const handleClearAll = () => {
-    if (window.confirm("Deseja apagar tudo e começar um novo?")) {
-        // 1. Unmount Stage
-        setIsResetting(true);
-        
-        // 2. Clear Data
+    if (window.confirm("Limpar toda a tela e começar do zero?")) {
+        // We reset the data...
         setItems([]);
         setBackground(null);
         setSelectedId(null);
         setIsBgLocked(true);
-        setShowBgOptions(false);
-        setBgResults([]);
-        setBgQuery('');
+        setActiveTab('none');
         
-        // 3. Remount after 50ms to ensure fresh state
-        setTimeout(() => {
-            setIsResetting(false);
-        }, 50);
+        // ... AND we increment the key to force React to unmount/remount the Stage
+        setResetKey(prev => prev + 1);
     }
   };
 
-  // --- Character Upload Flow ---
+  // --- Image Flows ---
   const handleCharUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files?.[0]) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setTempImageForEraser(event.target.result as string);
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          setTempImageForEraser(ev.target.result as string);
           setShowEraser(true);
         }
       };
@@ -121,35 +115,33 @@ const App: React.FC = () => {
     setTempImageForEraser(null);
   };
 
-  // --- Background Upload Flow (Gallery) ---
   const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
+      if (e.target.files?.[0]) {
         const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result) {
-            setBackground(event.target.result as string);
-            setShowBgOptions(false);
+        reader.onload = (ev) => {
+          if (ev.target?.result) {
+            setBackground(ev.target.result as string);
+            setActiveTab('none');
           }
         };
         reader.readAsDataURL(e.target.files[0]);
       }
-      if (bgInputRef.current) bgInputRef.current.value = '';
   };
 
-  // --- Background Search Flow (Pinterest) ---
   const handleSearchBackground = async () => {
+    if(!bgQuery) return;
     setIsSearching(true);
     const results = await searchPinterestBackgrounds(bgQuery);
     setBgResults(results);
     setIsSearching(false);
   };
 
-  // CAPTURE SCENE
+  // --- Capture Logic (Fixed for Bubbles) ---
   const handleCaptureScene = async () => {
     setSelectedId(null);
     setIsCapturing(true);
 
-    // Wait for UI to hide
+    // Small delay to let UI hide and React render the "clean" state
     setTimeout(async () => {
         const stageElement = document.getElementById('canvas-area');
         if (!stageElement) {
@@ -161,37 +153,23 @@ const App: React.FC = () => {
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                scale: 3, // High quality scale
-                backgroundColor: null, 
+                scale: 3, // High resolution (3x)
+                backgroundColor: null,
                 logging: false,
-                onclone: (doc) => {
-                    // --- CRITICAL FIXES FOR BUBBLE SAVING ---
-                    
-                    // 1. Target the bubble wrappers to ensure they hug content
-                    const bubbleContainers = doc.querySelectorAll('[data-bubble-container]');
-                    bubbleContainers.forEach((el: any) => {
-                        // Force layout to collapse around text
-                        el.style.height = 'auto';
-                        el.style.width = 'fit-content';
-                        el.style.display = 'inline-flex';
-                        el.style.alignItems = 'center';
-                        el.style.justifyContent = 'center';
-                    });
-
-                    // 2. Target text elements
-                    const bubbles = doc.querySelectorAll('[data-bubble-text]');
+                onclone: (clonedDoc) => {
+                    // --- THE FIX: Force styles on the cloned DOM before painting ---
+                    const bubbles = clonedDoc.querySelectorAll('[data-bubble-text]');
                     bubbles.forEach((el: any) => {
+                        // Hardcode CSS for the screenshot to prevent whitespace
                         el.style.lineHeight = '1.2';
+                        el.style.display = 'block'; 
                         el.style.margin = '0';
                         el.style.padding = '0';
-                        // Force inline behavior to remove block spacing
-                        el.style.display = 'block'; 
-                        el.style.height = 'auto';
-                        el.style.transform = "translateZ(0)"; 
+                        el.style.height = 'auto'; 
                     });
-
-                    // 3. Fix Image Squishing
-                    const images = doc.querySelectorAll('img');
+                    
+                    // Fix Image Aspect Ratios
+                    const images = clonedDoc.querySelectorAll('img');
                     images.forEach((img: any) => {
                         img.style.objectFit = 'contain';
                     });
@@ -200,256 +178,196 @@ const App: React.FC = () => {
             
             const imgData = canvas.toDataURL('image/png', 1.0);
             
-            setScenes(prev => [...prev, {
+            // Add to history
+            setScenes(prev => [{
                 id: Date.now().toString(),
                 thumbnail: imgData,
                 timestamp: Date.now()
-            }]);
+            }, ...prev]);
             
-            setShowScenesSidebar(true);
+            setShowHistory(true);
 
         } catch (err) {
-            console.error("Erro ao capturar:", err);
-            alert("Erro ao capturar cena.");
+            console.error("Capture failed:", err);
+            alert("Erro ao salvar imagem.");
         } finally {
             setIsCapturing(false);
         }
-    }, 300); 
+    }, 200); 
   };
 
-  const handleDownloadScene = (dataUrl: string, index: number) => {
+  const downloadScene = (dataUrl: string) => {
       const link = document.createElement('a');
-      link.download = `delani-cena-${index + 1}.png`;
+      link.download = `delani-studio-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
   };
 
-  const handleDeleteScene = (id: string) => {
-      setScenes(scenes.filter(s => s.id !== id));
-  };
-
   return (
-    <div className="flex flex-col h-[100dvh] bg-gradient-to-br from-pink-100 via-purple-100 to-blue-50 font-sans overflow-hidden relative">
+    <div className="flex flex-col h-[100dvh] bg-[#FFF0F5] font-sans overflow-hidden relative select-none">
       
-      {/* Header */}
+      {/* --- Header --- */}
       <header 
-        className={`absolute top-0 left-0 right-0 z-50 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible && !isCapturing ? 'translate-y-0' : '-translate-y-full'}`}
+        className={`absolute top-0 w-full z-40 transition-transform duration-300 ${uiVisible && !isCapturing ? 'translate-y-0' : '-translate-y-full'}`}
       >
-        <div className="flex flex-col md:flex-row justify-between items-center p-2 md:p-4 gap-2">
-            
-            <div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border-2 border-pink-200 pointer-events-auto flex items-center gap-2 transform hover:scale-105 transition-transform">
-                <Heart size={20} className="text-pink-500 fill-pink-500 animate-pulse" />
-                <h1 className="text-lg font-bold text-pink-500 tracking-wide font-sans">Delani Studio</h1>
+        <div className="flex justify-between items-center p-4">
+            {/* Title */}
+            <div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border-2 border-pink-200 flex items-center gap-2">
+                <Heart size={20} className="text-[#FF8FAB] fill-[#FF8FAB] animate-[pulse_1.5s_infinite]" />
+                <h1 className="text-lg font-bold text-[#FF8FAB] tracking-wide">Delani Studio</h1>
             </div>
 
-            <div className="bg-white/80 backdrop-blur-md p-1.5 rounded-full shadow-lg border-2 border-pink-200 pointer-events-auto flex gap-1 scale-90 md:scale-100">
-                <button onClick={() => setAspectRatio('9:16')} className={`p-2 rounded-full transition-all ${aspectRatio === '9:16' ? 'bg-pink-400 text-white shadow-md' : 'text-gray-400 hover:text-pink-400'}`} title="TikTok">
-                  <Smartphone size={18} />
-                </button>
-                <button onClick={() => setAspectRatio('16:9')} className={`p-2 rounded-full transition-all ${aspectRatio === '16:9' ? 'bg-pink-400 text-white shadow-md' : 'text-gray-400 hover:text-pink-400'}`} title="PC/YouTube">
-                  <Monitor size={18} />
-                </button>
-                <button onClick={() => setAspectRatio('1:1')} className={`p-2 rounded-full transition-all ${aspectRatio === '1:1' ? 'bg-pink-400 text-white shadow-md' : 'text-gray-400 hover:text-pink-400'}`} title="Instagram">
-                  <Square size={18} />
-                </button>
-            </div>
-            
-            <div className="flex gap-2 pointer-events-auto">
+            {/* Top Actions */}
+            <div className="flex gap-2">
                 <button 
                     onClick={handleClearAll}
-                    className="bg-white/90 text-red-400 p-2 px-4 rounded-full shadow-md font-bold border-2 border-white hover:bg-red-50 hover:text-red-500 transition-colors flex items-center gap-2 active:scale-95"
-                    title="Começar um Novo"
+                    className="w-10 h-10 bg-white text-red-400 rounded-full shadow-md flex items-center justify-center border-2 border-white active:scale-95 transition-all"
+                    title="Limpar Tudo"
                 >
-                    <FilePlus2 size={20} />
-                    <span className="hidden md:inline text-sm">Novo</span>
+                    <RefreshCcw size={18} />
                 </button>
                 
                 <button 
                     onClick={handleCaptureScene}
                     disabled={isCapturing}
-                    className="bg-gradient-to-r from-pink-400 to-purple-400 text-white px-5 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 hover:scale-105 transition-transform border-2 border-white disabled:opacity-50 active:scale-95"
+                    className="bg-[#FF8FAB] text-white px-4 py-2 rounded-full shadow-lg font-bold flex items-center gap-2 active:scale-95 transition-all border-2 border-white"
                 >
-                    {isCapturing ? <Sparkles className="animate-spin" size={20} /> : <Camera size={20} />} 
-                    <span className="hidden md:inline">Salvar</span>
+                    {isCapturing ? <Sparkles className="animate-spin" size={18} /> : <Camera size={18} />} 
+                    <span className="hidden sm:inline">Salvar</span>
                 </button>
             </div>
+        </div>
+
+        {/* Aspect Ratio Selector (Floating) */}
+        <div className="absolute top-20 right-4 flex flex-col gap-2 pointer-events-auto">
+             <div className="bg-white/90 backdrop-blur p-2 rounded-2xl shadow-xl border border-pink-100 flex flex-col gap-2">
+                <button onClick={() => setAspectRatio('9:16')} className={`p-2 rounded-xl transition-all ${aspectRatio === '9:16' ? 'bg-pink-100 text-pink-500' : 'text-gray-400'}`}><Smartphone size={20}/></button>
+                <button onClick={() => setAspectRatio('1:1')} className={`p-2 rounded-xl transition-all ${aspectRatio === '1:1' ? 'bg-pink-100 text-pink-500' : 'text-gray-400'}`}><Square size={20}/></button>
+                <button onClick={() => setAspectRatio('16:9')} className={`p-2 rounded-xl transition-all ${aspectRatio === '16:9' ? 'bg-pink-100 text-pink-500' : 'text-gray-400'}`}><Monitor size={20}/></button>
+             </div>
+             
+             <button 
+                onClick={() => setShowHistory(!showHistory)}
+                className="bg-white text-pink-400 p-3 rounded-2xl shadow-xl border border-pink-100 mt-2 active:scale-95"
+             >
+                <ImageIcon size={20} />
+             </button>
         </div>
       </header>
 
-      {/* Main Stage */}
-      <main className="flex-1 relative touch-none w-full h-full flex items-center justify-center">
-        {/* NUCLEAR RESET: If isResetting is true, component is unmounted */}
-        {!isResetting && (
-            <Stage 
-                items={items}
-                backgroundUrl={background}
-                selectedId={selectedId}
-                isBgLocked={isBgLocked}
-                isSaving={isCapturing}
-                aspectRatio={aspectRatio}
-                onToggleBgLock={() => setIsBgLocked(!isBgLocked)}
-                onSelectItem={setSelectedId}
-                onUpdateItem={handleUpdateItem}
-                onRemoveItem={handleRemoveItem}
-            />
+      {/* --- Main Stage --- */}
+      <main className="flex-1 w-full h-full relative">
+        <Stage 
+            key={resetKey} // THE NUCLEAR RESET KEY
+            items={items}
+            backgroundUrl={background}
+            selectedId={selectedId}
+            isBgLocked={isBgLocked}
+            isSaving={isCapturing}
+            aspectRatio={aspectRatio}
+            onToggleBgLock={() => setIsBgLocked(!isBgLocked)}
+            onSelectItem={setSelectedId}
+            onUpdateItem={handleUpdateItem}
+            onRemoveItem={handleRemoveItem}
+        />
+        
+        {/* Helper Message (Visible only when UI is on) */}
+        {uiVisible && !isCapturing && (
+          <div className="absolute bottom-32 right-6 pointer-events-none opacity-80 animate-bounce-slow z-10">
+              <span className="bg-white/80 backdrop-blur px-3 py-1 rounded-full text-pink-500 font-bold text-xs shadow-sm flex items-center gap-1">
+                 Delani Eu te amo muito! <Heart size={10} className="fill-pink-500"/>
+              </span>
+          </div>
         )}
       </main>
 
-      {/* MESSAGE FOR DELANI (Outside Stage so it isn't captured) */}
-      {!isCapturing && uiVisible && (
-          <div className="absolute bottom-32 right-6 z-10 pointer-events-none select-none flex items-center gap-1 opacity-90 animate-bounce-slow">
-              <span className="text-pink-500 font-bold text-sm italic font-sans drop-shadow-md bg-white/50 px-2 rounded-full backdrop-blur-sm">Delani Eu te amo muito!</span>
-              <Heart size={14} className="text-pink-500 fill-pink-500 animate-pulse" />
-          </div>
-      )}
-
-      {/* Sidebar Toggle */}
-      {!isCapturing && (
-          <button 
-              onClick={() => setShowScenesSidebar(!showScenesSidebar)}
-              className="absolute top-1/2 right-0 transform -translate-y-1/2 z-40 bg-white p-3 rounded-l-2xl shadow-xl border-2 border-r-0 border-pink-200 text-pink-500 hover:bg-pink-50 transition-all"
-          >
-              {showScenesSidebar ? <X size={24} /> : <Film size={24} />}
-              {scenes.length > 0 && !showScenesSidebar && (
-                  <span className="absolute -top-2 -left-2 bg-red-500 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full font-bold shadow-sm">
-                      {scenes.length}
-                  </span>
-              )}
-          </button>
-      )}
-
-      {/* Scenes Sidebar */}
-      <div className={`absolute top-0 right-0 bottom-0 w-72 bg-white/90 backdrop-blur-xl shadow-2xl z-30 transition-transform duration-300 ease-in-out border-l border-pink-200 flex flex-col pt-20 ${showScenesSidebar ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="p-4 border-b border-pink-100 flex items-center justify-between">
-              <h2 className="font-bold text-pink-500 flex items-center gap-2"><History size={20}/> Histórico</h2>
-              <span className="text-xs text-gray-400">{scenes.length} cenas</span>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {scenes.length === 0 ? (
-                  <div className="text-center text-gray-400 mt-10">
-                      <Camera size={40} className="mx-auto mb-3 opacity-30 text-pink-300"/>
-                      <p className="text-sm font-medium text-pink-300">Tire fotos!</p>
-                  </div>
-              ) : (
-                  scenes.map((scene, idx) => (
-                      <div key={scene.id} className="relative group bg-pink-50 p-2 rounded-2xl border-2 border-pink-100 hover:border-pink-300 transition-colors">
-                          <div className="text-xs font-bold text-pink-400 mb-1 ml-1">Cena {idx + 1}</div>
-                          <img src={scene.thumbnail} alt={`Cena ${idx}`} className="w-full rounded-xl shadow-sm bg-white" />
-                          <div className="flex gap-2 mt-2">
-                              <button 
-                                  onClick={() => handleDownloadScene(scene.thumbnail, idx)}
-                                  className="flex-1 bg-pink-400 text-white py-1.5 rounded-lg text-xs font-bold hover:bg-pink-500 flex items-center justify-center gap-1 shadow-sm"
-                              >
-                                  <Download size={14}/> Baixar
-                              </button>
-                              <button 
-                                  onClick={() => handleDeleteScene(scene.id)}
-                                  className="bg-white text-red-400 border border-red-100 p-1.5 rounded-lg hover:bg-red-50"
-                              >
-                                  <Trash2 size={16}/>
-                              </button>
-                          </div>
-                      </div>
-                  ))
-              )}
-          </div>
-      </div>
-
-      {/* UI Visibility Toggle */}
-      {!uiVisible && !isCapturing && (
-          <button 
-            onClick={() => setUiVisible(true)}
-            className="absolute bottom-6 right-6 z-40 bg-white/80 backdrop-blur-md p-4 rounded-full shadow-lg border-2 border-white text-pink-500 hover:scale-110 transition-all animate-bounce"
-          >
-              <Eye size={28} />
-          </button>
-      )}
-
-      {/* Toolbar Footer */}
+      {/* --- Bottom Toolbar (Floating Island) --- */}
       <footer 
-        className={`absolute bottom-0 left-0 right-0 z-30 flex flex-col items-center justify-end pb-8 pointer-events-none transition-transform duration-300 ease-in-out ${uiVisible && !isCapturing ? 'translate-y-0' : 'translate-y-[150%]'}`}
+        className={`absolute bottom-6 left-0 right-0 z-40 transition-transform duration-300 ${uiVisible && !isCapturing ? 'translate-y-0' : 'translate-y-[150%]'}`}
       >
-        {showBgOptions && (
-            <div className="mb-4 bg-white/90 backdrop-blur-xl p-3 rounded-2xl shadow-xl flex gap-4 animate-slide-up border-2 border-pink-100 pointer-events-auto">
-                <button 
-                    onClick={() => bgInputRef.current?.click()}
-                    className="flex flex-col items-center gap-1 p-2 hover:bg-pink-50 rounded-xl transition-colors"
-                >
-                    <div className="bg-purple-100 p-3 rounded-full text-purple-500"><Upload size={20}/></div>
-                    <span className="text-[10px] font-bold text-purple-400">Galeria</span>
-                </button>
-                <button 
-                    onClick={() => { setShowBgSearch(true); setShowBgOptions(false); }}
-                    className="flex flex-col items-center gap-1 p-2 hover:bg-pink-50 rounded-xl transition-colors"
-                >
-                    <div className="bg-red-100 p-3 rounded-full text-red-500"><Sparkles size={20}/></div>
-                    <span className="text-[10px] font-bold text-red-400">Pinterest</span>
+        <div className="flex justify-center items-end relative px-4">
+            
+            {/* Popups Menus */}
+            {activeTab === 'bg' && (
+                <div className="absolute bottom-24 bg-white/90 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border-2 border-pink-100 w-full max-w-sm animate-slide-up flex flex-col gap-3">
+                    <div className="flex gap-2">
+                        <button onClick={() => bgInputRef.current?.click()} className="flex-1 bg-purple-50 p-3 rounded-xl flex flex-col items-center gap-1 text-purple-500 hover:bg-purple-100">
+                            <Upload size={20}/> <span className="text-xs font-bold">Galeria</span>
+                        </button>
+                        <button onClick={() => { setShowBgSearch(true); setActiveTab('none'); }} className="flex-1 bg-red-50 p-3 rounded-xl flex flex-col items-center gap-1 text-red-500 hover:bg-red-100">
+                            <Sparkles size={20}/> <span className="text-xs font-bold">Pinterest</span>
+                        </button>
+                    </div>
+                    <button onClick={() => setActiveTab('none')} className="w-full py-2 text-gray-400 text-xs font-bold">Fechar</button>
+                </div>
+            )}
+
+            {activeTab === 'sticker' && (
+                <div className="absolute bottom-24 bg-white/90 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border-2 border-pink-100 w-full max-w-sm animate-slide-up">
+                    <div className="grid grid-cols-6 gap-2">
+                        {STICKERS.map(s => (
+                            <button key={s} onClick={() => handleAddItem('sticker', s)} className="text-2xl hover:scale-125 transition-transform p-1">
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Main Bar */}
+            <div className="bg-white/95 backdrop-blur-xl shadow-[0_10px_40px_-10px_rgba(255,143,171,0.4)] rounded-full p-2 px-6 border border-white ring-4 ring-pink-100 flex items-center gap-4 md:gap-8">
+                
+                <ToolBtn 
+                    icon={<ImagePlus size={24} />} 
+                    label="Boneco" 
+                    color="pink" 
+                    onClick={() => charInputRef.current?.click()} 
+                />
+                <input type="file" ref={charInputRef} className="hidden" accept="image/*" onChange={handleCharUpload} />
+
+                <ToolBtn 
+                    icon={<ImageIcon size={24} />} 
+                    label="Fundo" 
+                    color="purple" 
+                    active={activeTab === 'bg'}
+                    onClick={() => setActiveTab(activeTab === 'bg' ? 'none' : 'bg')} 
+                />
+                <input type="file" ref={bgInputRef} className="hidden" accept="image/*" onChange={handleBgUpload} />
+
+                <ToolBtn 
+                    icon={<MessageCircleHeart size={24} />} 
+                    label="Fala" 
+                    color="blue" 
+                    onClick={() => handleAddItem('bubble')} 
+                />
+
+                <ToolBtn 
+                    icon={<Sticker size={24} />} 
+                    label="Decorar" 
+                    color="yellow" 
+                    active={activeTab === 'sticker'}
+                    onClick={() => setActiveTab(activeTab === 'sticker' ? 'none' : 'sticker')} 
+                />
+                
+                <div className="w-px h-8 bg-gray-200 mx-1"></div>
+
+                <button onClick={() => setUiVisible(false)} className="opacity-50 hover:opacity-100 transition-opacity">
+                    <EyeOff size={20} className="text-gray-400"/>
                 </button>
             </div>
-        )}
-
-        <div className="bg-white/90 backdrop-blur-xl shadow-2xl rounded-[2rem] p-3 px-6 flex items-center gap-4 md:gap-8 pointer-events-auto border-4 border-white ring-4 ring-pink-200/50 mx-4 max-w-full overflow-x-auto no-scrollbar">
-            
-            <button 
-                onClick={() => charInputRef.current?.click()}
-                className="group flex flex-col items-center justify-center gap-1 w-16 h-16 flex-shrink-0 active:scale-95 transition-transform"
-            >
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-300 to-pink-400 flex items-center justify-center shadow-md border-2 border-white group-hover:from-pink-400 group-hover:to-pink-500 transition-all">
-                    <ImagePlus size={24} className="text-white" />
-                </div>
-                <span className="text-[10px] font-bold text-pink-500">Boneco</span>
-            </button>
-            <input 
-                type="file" 
-                ref={charInputRef} 
-                className="hidden" 
-                accept="image/*" 
-                onChange={handleCharUpload}
-            />
-
-            <button 
-                onClick={() => setShowBgOptions(!showBgOptions)}
-                className="group flex flex-col items-center justify-center gap-1 w-16 h-16 flex-shrink-0 active:scale-95 transition-transform"
-            >
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-300 to-purple-400 flex items-center justify-center shadow-md border-2 border-white group-hover:from-purple-400 group-hover:to-purple-500 transition-all">
-                    <ImageIcon size={24} className="text-white" />
-                </div>
-                <span className="text-[10px] font-bold text-purple-500">Fundo</span>
-            </button>
-            <input 
-                type="file" 
-                ref={bgInputRef} 
-                className="hidden" 
-                accept="image/*" 
-                onChange={handleBgUpload}
-            />
-
-            <button 
-                 onClick={() => handleAddItem('bubble')}
-                 className="group flex flex-col items-center justify-center gap-1 w-16 h-16 flex-shrink-0 active:scale-95 transition-transform"
-            >
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-300 to-blue-400 flex items-center justify-center shadow-md border-2 border-white group-hover:from-blue-400 group-hover:to-blue-500 transition-all">
-                    <MessageSquarePlus size={24} className="text-white" />
-                </div>
-                <span className="text-[10px] font-bold text-blue-500">Fala</span>
-            </button>
-
-            <div className="w-px h-10 bg-pink-200 mx-2"></div>
-
-            <button 
-                onClick={() => setUiVisible(false)}
-                className="flex flex-col items-center justify-center gap-1 w-12 h-16 opacity-70 hover:opacity-100 flex-shrink-0 active:scale-95 transition-transform"
-            >
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center border-2 border-transparent hover:border-pink-200">
-                     <EyeOff size={20} className="text-gray-500" />
-                </div>
-                <span className="text-[9px] font-bold text-gray-400">Esconder</span>
-            </button>
-
         </div>
       </footer>
 
+      {/* --- UI Visibility Restorer --- */}
+      {!uiVisible && !isCapturing && (
+          <button onClick={() => setUiVisible(true)} className="absolute bottom-6 right-6 z-50 bg-white p-4 rounded-full shadow-xl animate-bounce text-pink-500">
+              <Eye size={24} />
+          </button>
+      )}
+
       {/* --- Modals --- */}
+      
+      {/* Eraser / Cutout */}
       {showEraser && tempImageForEraser && (
         <EraserModal 
           imageSrc={tempImageForEraser}
@@ -458,77 +376,113 @@ const App: React.FC = () => {
         />
       )}
 
+      {/* Pinterest Search */}
       {showBgSearch && (
-        <div className="fixed inset-0 z-50 bg-pink-900/40 backdrop-blur-sm flex items-center justify-center animate-fade-in p-4">
-            <div className="bg-white w-full max-w-4xl h-[90vh] md:h-[80vh] rounded-[2rem] flex flex-col overflow-hidden animate-slide-up shadow-2xl relative ring-8 ring-white/50">
-                <div className="p-4 border-b border-pink-100 flex justify-between items-center bg-white sticky top-0 z-10">
-                    <div className="flex items-center gap-2">
-                        <Sparkles size={24} className="text-pink-400" />
-                        <h3 className="font-bold text-pink-500 text-xl font-sans">Pinterest</h3>
-                    </div>
-                    <button onClick={() => setShowBgSearch(false)} className="p-2 hover:bg-pink-50 rounded-full text-pink-400 transition-colors">
-                        <X size={28} />
-                    </button>
+        <div className="fixed inset-0 z-50 bg-pink-900/30 backdrop-blur-md flex items-center justify-center p-4 animate-[fadeIn_0.2s]">
+            <div className="bg-[#FFF0F5] w-full max-w-4xl h-[85vh] rounded-[2rem] flex flex-col overflow-hidden shadow-2xl border-4 border-white">
+                <div className="p-4 bg-white flex justify-between items-center shadow-sm z-10">
+                    <h3 className="font-bold text-pink-500 text-xl flex items-center gap-2">
+                        <Sparkles size={20}/> Pinterest
+                    </h3>
+                    <button onClick={() => setShowBgSearch(false)} className="bg-pink-100 p-2 rounded-full text-pink-400"><X/></button>
                 </div>
                 
-                <div className="p-4 bg-pink-50/50 border-b border-pink-100">
-                    <div className="flex gap-2 relative">
+                <div className="p-4 bg-white/50">
+                    <div className="flex gap-2">
                         <input 
-                            type="text" 
                             value={bgQuery}
                             onChange={(e) => setBgQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearchBackground()}
-                            placeholder="Ex: Quarto anime..."
-                            className="flex-1 p-3 px-5 border-2 border-pink-200 rounded-2xl focus:border-pink-400 outline-none text-gray-600 bg-white shadow-inner placeholder-pink-200"
+                            placeholder="Ex: Quarto fofo anime..."
+                            className="flex-1 p-3 rounded-xl border-2 border-pink-200 focus:border-pink-400 outline-none bg-white text-gray-600"
                         />
                         <button 
                             onClick={handleSearchBackground}
                             disabled={isSearching}
-                            className="bg-pink-400 text-white px-6 py-2 rounded-2xl font-bold hover:bg-pink-500 disabled:opacity-50 transition-colors shadow-md whitespace-nowrap"
+                            className="bg-pink-400 text-white px-6 rounded-xl font-bold hover:bg-pink-500 disabled:opacity-50"
                         >
-                            {isSearching ? <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"/> : 'Buscar'}
+                            {isSearching ? '...' : 'Buscar'}
                         </button>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="flex-1 overflow-y-auto p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {bgResults.length === 0 && !isSearching && (
-                             <div className="col-span-full flex flex-col items-center justify-center text-pink-200 mt-20 gap-3">
-                                <ImageIcon size={64} className="opacity-40" />
-                                <p className="text-center font-bold text-lg">
-                                    {bgQuery ? "Nadinha encontrado :(" : "Pesquise cenários!"}
-                                </p>
-                             </div>
+                            <div className="col-span-full text-center text-pink-300 mt-20 font-bold">
+                                Pesquise algo fofo! ✨
+                            </div>
                         )}
                         {bgResults.map((bg, idx) => (
                             <button 
                                 key={idx} 
-                                onClick={() => {
-                                    setBackground(bg.url);
-                                    setShowBgSearch(false);
-                                }}
-                                className="relative aspect-video rounded-2xl overflow-hidden border-2 border-white shadow-md hover:shadow-xl hover:scale-105 transition-all group bg-gray-100"
+                                onClick={() => { setBackground(bg.url); setShowBgSearch(false); }}
+                                className="aspect-video rounded-xl overflow-hidden border-2 border-white shadow-sm hover:scale-105 transition-transform"
                             >
-                                <img 
-                                  src={bg.url} 
-                                  alt={bg.source} 
-                                  className="w-full h-full object-cover" 
-                                  loading="lazy"
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-pink-500/20 transition-colors flex items-center justify-center">
-                                    <Heart className="text-white opacity-0 group-hover:opacity-100 transform scale-0 group-hover:scale-100 transition-all" size={32} fill="currentColor" />
-                                </div>
+                                <img src={bg.url} alt="bg" className="w-full h-full object-cover" />
                             </button>
                         ))}
                     </div>
-                    <div className="h-24"></div>
+                    {/* Padding for bottom scroll */}
+                    <div className="h-10"></div>
                 </div>
             </div>
         </div>
       )}
+
+      {/* History Sidebar */}
+      {showHistory && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
+              <div className="w-80 bg-white h-full relative z-10 shadow-2xl flex flex-col animate-[slideLeft_0.3s]">
+                  <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-pink-50">
+                      <h2 className="font-bold text-pink-500">Minhas Cenas</h2>
+                      <button onClick={() => setShowHistory(false)}><X size={20} className="text-gray-400"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {scenes.length === 0 && <p className="text-center text-gray-400 mt-10 text-sm">Nenhuma cena salva ainda.</p>}
+                      {scenes.map((scene, i) => (
+                          <div key={scene.id} className="bg-gray-50 p-2 rounded-xl border border-gray-100">
+                              <img src={scene.thumbnail} className="w-full rounded-lg bg-white shadow-sm" />
+                              <div className="flex gap-2 mt-2">
+                                  <button onClick={() => downloadScene(scene.thumbnail)} className="flex-1 bg-pink-400 text-white py-1 rounded-lg text-xs font-bold">Baixar</button>
+                                  <button onClick={() => setScenes(prev => prev.filter(x => x.id !== scene.id))} className="px-3 bg-white border border-red-100 text-red-400 rounded-lg"><Trash2 size={14}/></button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 };
+
+// Helper Component for Toolbar Buttons
+const ToolBtn = ({ icon, label, color, onClick, active }: any) => {
+    const colors: any = {
+        pink: 'from-pink-400 to-rose-400',
+        purple: 'from-purple-400 to-violet-400',
+        blue: 'from-blue-400 to-cyan-400',
+        yellow: 'from-amber-300 to-orange-300',
+    };
+
+    return (
+        <button 
+            onClick={onClick}
+            className={`flex flex-col items-center gap-1 group w-14 transition-transform active:scale-95 ${active ? '-translate-y-2' : ''}`}
+        >
+            <div className={`
+                w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md
+                bg-gradient-to-br ${colors[color]} ${active ? 'ring-4 ring-white shadow-xl' : ''}
+                group-hover:scale-110 transition-all border-2 border-white
+            `}>
+                {icon}
+            </div>
+            <span className={`text-[10px] font-bold ${active ? 'text-gray-800' : 'text-gray-400'}`}>{label}</span>
+        </button>
+    )
+}
 
 export default App;
