@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Delani Gacha Studio",
+  "description": "A creative studio app for creating scenes with characters, backgrounds, and speech bubbles. Features manual background removal, Pinterest background search, and multi-touch editing.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

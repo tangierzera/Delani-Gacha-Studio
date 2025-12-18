@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#FFC4D6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>Delani Gacha Studio</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="https://img.icons8.com/color/96/sparkling-heart.png">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/96/sparkling-heart.png">
+    
+    <!-- Cute Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Screenshot Library -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Quicksand', 'sans-serif'],
+            },
+            colors: {
+              gacha: {
+                pink: '#FFC4D6',     /* Soft Pink */
+                hot: '#FF8FAB',      /* Hot Pink */
+                lavender: '#E7C6FF', /* Lavender */
+                cream: '#FFF1E6',    /* Cream */
+                sky: '#BDE0FE',      /* Baby Blue */
+                text: '#6D597A'      /* Soft Purple Text */
+              }
+            },
+            animation: {
+              'bounce-slow': 'bounce 3s infinite',
+              'slide-up': 'slideUp 0.3s ease-out forwards'
+            },
+            keyframes: {
+              slideUp: {
+                '0%': { transform: 'translateY(100%)' },
+                '100%': { transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        overscroll-behavior-y: contain;
+        touch-action: none;
+        background-color: #FFF1E6;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #FFF1E6; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #FF8FAB; 
+        border-radius: 10px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
