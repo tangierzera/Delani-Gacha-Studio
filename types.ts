@@ -1,6 +1,7 @@
 
 export type ItemType = 'character' | 'dialogue' | 'sticker';
 export type AspectRatio = '9:16' | '16:9' | '1:1';
+export type SceneFilter = 'none' | 'dreamy' | 'vintage' | 'night' | 'warm';
 
 export interface SceneItem {
   id: string;
@@ -15,14 +16,15 @@ export interface SceneItem {
   
   // Character/Sticker specific
   src?: string; 
-  emoji?: string; // For native stickers
+  emoji?: string; 
+  flipX?: boolean; // New: Mirror characters
   
   // Dialogue specific (Gacha Style)
   text?: string;
   dialogueName?: string;
   nameColor?: string;
-  dialogueStyle?: 'speech' | 'thought'; // New property
-  tailAngle?: number; // Supports 360 degree rotation
+  dialogueStyle?: 'speech' | 'thought'; 
+  tailAngle?: number; 
 }
 
 export interface BackgroundImage {
@@ -32,6 +34,6 @@ export interface BackgroundImage {
 
 export interface StoredScene {
   id: string;
-  thumbnail: string; // Base64 image
+  thumbnail: string; 
   timestamp: number;
 }

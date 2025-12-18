@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { SceneItem, BackgroundImage, AspectRatio, StoredScene } from './types';
+import { SceneItem, BackgroundImage, AspectRatio, StoredScene, SceneFilter } from './types';
 import Stage from './components/Stage';
 import EraserModal from './components/EraserModal';
 import { searchPinterestBackgrounds } from './services/serpApiService';
 import { 
   ImagePlus, MessageCircleHeart, Image as ImageIcon, 
   Camera, Trash2, X, Heart, Sparkles, Eye, EyeOff, 
-  Smartphone, Monitor, Square, Sticker, Upload
+  Smartphone, Monitor, Square, Sticker, Upload, Wand2
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
@@ -26,11 +26,12 @@ const App: React.FC = () => {
   const [bgResults, setBgResults] = useState<BackgroundImage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'none' | 'bg' | 'sticker'>('none');
+  const [activeTab, setActiveTab] = useState<'none' | 'bg' | 'sticker' | 'filter'>('none');
   const [showHistory, setShowHistory] = useState(false);
   const [scenes, setScenes] = useState<StoredScene[]>([]);
   
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('9:16');
+  const [activeFilter, setActiveFilter] = useState<SceneFilter>('none');
   const [isBgLocked, setIsBgLocked] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [uiVisible, setUiVisible] = useState(true);
@@ -55,6 +56,7 @@ const App: React.FC = () => {
       nameColor: type === 'dialogue' ? '#FF8FAB' : undefined,
       dialogueStyle: 'speech', // Default
       tailAngle: 0, // Default bottom
+      flipX: false,
       emoji: type === 'sticker' ? payload : undefined,
     };
     
@@ -151,7 +153,7 @@ const App: React.FC = () => {
                 width: rect.width,
                 height: rect.height,
                 scrollX: 0,
-                scrollY: -window.scrollY, // Fix offset issues
+                scrollY: -window.scrollY, 
                 onclone: (clonedDoc) => {
                     // 1. Fix Image containment
                     const images = clonedDoc.querySelectorAll('img');
@@ -162,20 +164,13 @@ const App: React.FC = () => {
                         const elements = clonedDoc.querySelectorAll(selector);
                         elements.forEach((el: any) => {
                             const rawText = el.innerText;
-                            
-                            // Strip ALL editable attributes that cause weird rendering
+                            // Clean contentEditable artifacts
                             el.removeAttribute('contenteditable');
-                            
-                            // FORCE styles to prevent browser differences
+                            // Ensure text fits perfectly
                             el.style.display = 'block';
-                            el.style.margin = '0';
-                            el.style.padding = '0';
-                            el.style.overflowWrap = 'break-word'; // Safer than anywhere
-                            el.style.wordBreak = 'break-word';
-                            el.style.whiteSpace = 'pre-wrap'; // Preserves actual lines, no fake wrapping
-                            el.style.lineHeight = '1.25'; // Match editor exactly
-                            
-                            // Ensure text is trimmed of trailing newlines which cause "bottom gaps"
+                            el.style.overflowWrap = 'break-word'; 
+                            el.style.whiteSpace = 'pre-wrap'; 
+                            el.style.lineHeight = '1.25';
                             el.innerText = rawText.trim(); 
                         });
                     }
@@ -252,6 +247,7 @@ const App: React.FC = () => {
                 isBgLocked={isBgLocked}
                 isSaving={isCapturing}
                 aspectRatio={aspectRatio}
+                activeFilter={activeFilter}
                 onToggleBgLock={() => setIsBgLocked(!isBgLocked)}
                 onSelectItem={(id) => setSelectedId(id)}
                 onUpdateItem={handleUpdateItem}
@@ -284,6 +280,15 @@ const App: React.FC = () => {
                         </div>
                     </div>
                 )}
+                {activeTab === 'filter' && (
+                    <div className="bg-white/90 backdrop-blur-xl p-4 rounded-3xl shadow-2xl border border-pink-100 w-full animate-slide-up flex gap-2 overflow-x-auto">
+                        <button onClick={() => setActiveFilter('none')} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${activeFilter === 'none' ? 'border-pink-400 bg-pink-50 text-pink-500' : 'border-gray-100 text-gray-500'}`}>Normal</button>
+                        <button onClick={() => setActiveFilter('dreamy')} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${activeFilter === 'dreamy' ? 'border-purple-400 bg-purple-50 text-purple-500' : 'border-gray-100 text-gray-500'}`}>Dreamy</button>
+                        <button onClick={() => setActiveFilter('vintage')} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${activeFilter === 'vintage' ? 'border-amber-400 bg-amber-50 text-amber-500' : 'border-gray-100 text-gray-500'}`}>Vintage</button>
+                        <button onClick={() => setActiveFilter('night')} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${activeFilter === 'night' ? 'border-blue-400 bg-blue-50 text-blue-500' : 'border-gray-100 text-gray-500'}`}>Night</button>
+                        <button onClick={() => setActiveFilter('warm')} className={`px-4 py-2 rounded-xl text-sm font-bold border-2 ${activeFilter === 'warm' ? 'border-orange-400 bg-orange-50 text-orange-500' : 'border-gray-100 text-gray-500'}`}>Warm</button>
+                    </div>
+                )}
 
                 {/* Main Bar */}
                 <div className="bg-white/95 backdrop-blur-xl shadow-2xl rounded-full p-2 px-6 border-2 border-white ring-4 ring-pink-100 flex items-center justify-between gap-2 w-full">
@@ -296,6 +301,8 @@ const App: React.FC = () => {
                     <ToolBtn icon={<MessageCircleHeart size={22}/>} label="Fala" color="blue" onClick={() => handleAddItem('dialogue')}/>
                     
                     <ToolBtn icon={<Sticker size={22}/>} label="Decorar" color="yellow" active={activeTab === 'sticker'} onClick={() => setActiveTab(activeTab === 'sticker' ? 'none' : 'sticker')}/>
+
+                    <ToolBtn icon={<Wand2 size={22}/>} label="Filtro" color="yellow" active={activeTab === 'filter'} onClick={() => setActiveTab(activeTab === 'filter' ? 'none' : 'filter')}/>
                     
                     <div className="w-px h-8 bg-gray-200 mx-1"></div>
                     <button onClick={() => setUiVisible(false)} className="opacity-40 hover:opacity-100"><EyeOff size={20}/></button>
