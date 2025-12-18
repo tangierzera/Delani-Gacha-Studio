@@ -1,4 +1,6 @@
+
 export type ItemType = 'character' | 'bubble';
+export type AspectRatio = '9:16' | '16:9' | '1:1';
 
 export interface SceneItem {
   id: string;
@@ -8,18 +10,24 @@ export interface SceneItem {
   scale: number;
   rotation: number;
   zIndex: number;
-  locked?: boolean; // New property for locking movement
+  locked?: boolean;
   // Character specific
   src?: string; 
   // Bubble specific
   text?: string;
   bubbleStyle?: 'speech' | 'thought';
-  tailAngle?: number; // Angle in degrees for the speech bubble tail
+  tailAngle?: number; // Changed to number for 360 rotation
 }
 
 export interface BackgroundImage {
   url: string;
   source: string;
+}
+
+export interface StoredScene {
+  id: string;
+  thumbnail: string; // Base64 image
+  timestamp: number;
 }
 
 export interface DragState {
