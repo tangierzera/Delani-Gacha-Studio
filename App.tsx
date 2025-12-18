@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [bgQuery, setBgQuery] = useState('');
   const [bgResults, setBgResults] = useState<BackgroundImage[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isBgLocked, setIsBgLocked] = useState(false);
   
   // UI Visibility State (Toggle to hide menus)
   const [uiVisible, setUiVisible] = useState(true);
@@ -38,7 +39,8 @@ const App: React.FC = () => {
       zIndex: items.length + 1,
       src: src,
       text: type === 'bubble' ? 'Olá!' : undefined,
-      bubbleStyle: 'speech'
+      bubbleStyle: 'speech',
+      locked: false
     };
     setItems([...items, newItem]);
     setSelectedId(newItem.id);
@@ -84,7 +86,7 @@ const App: React.FC = () => {
     setIsSearching(false);
   };
 
-  // SAVE IMAGE LOGIC (FIXED FOR HD QUALITY & NO DISTORTION)
+  // SAVE IMAGE LOGIC (FIXED FOR MOBILE DISTORTION)
   const handleSaveScene = async () => {
     // Deselect item to remove dashed lines/buttons before saving
     setSelectedId(null);
@@ -95,23 +97,24 @@ const App: React.FC = () => {
         if (!stageElement) return;
 
         try {
-            // Get exact VISIBLE dimensions
-            const width = stageElement.clientWidth;
-            const height = stageElement.clientHeight;
-
+            // CRITICAL FIX FOR MOBILE:
+            // 1. We do NOT pass width/height explicitly. This forces html2canvas to capture the "natural" size of the element.
+            // 2. We set scrollX/Y to 0 to avoid offsets.
+            // 3. We use a high scale for quality.
+            
             const canvas = await html2canvas(stageElement, {
                 useCORS: true, 
                 allowTaint: true, 
-                // Set explicit dimensions to match screen exactly
-                width: width,
-                height: height,
-                scale: 3, // 3x Resolution for High Quality
+                scale: 3, // 3x Resolution (HD)
                 backgroundColor: null,
                 logging: false,
                 scrollX: 0,
                 scrollY: 0,
                 x: 0,
-                y: 0
+                y: 0,
+                // These settings ensure it captures exactly what's in the DOM
+                windowWidth: stageElement.scrollWidth,
+                windowHeight: stageElement.scrollHeight
             });
             
             // Create download link
@@ -157,6 +160,8 @@ const App: React.FC = () => {
           items={items}
           backgroundUrl={background}
           selectedId={selectedId}
+          isBgLocked={isBgLocked}
+          onToggleBgLock={() => setIsBgLocked(!isBgLocked)}
           onSelectItem={setSelectedId}
           onUpdateItem={handleUpdateItem}
           onRemoveItem={handleRemoveItem}

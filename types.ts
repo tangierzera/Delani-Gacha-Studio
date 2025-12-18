@@ -8,6 +8,7 @@ export interface SceneItem {
   scale: number;
   rotation: number;
   zIndex: number;
+  locked?: boolean; // New property for locking movement
   // Character specific
   src?: string; 
   // Bubble specific
